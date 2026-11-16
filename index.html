@@ -14,6 +14,16 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230C0C0E'/%3E%3Cpath d='M3 18h7l2-3 3 9 3-17 3 11h8' fill='none' stroke='%23F5A25D' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
   </head>
   <body>
+    <div id="loader" role="status" aria-live="polite">
+      <p class="loader-project"></p>
+      <div class="loader-temp"><span class="loader-num">20.0</span><small class="loader-unit"></small></div>
+      <div class="loader-scale">
+        <div class="loader-bar"><i class="loader-fill"></i></div>
+        <div class="loader-mark"><span></span></div>
+      </div>
+      <p class="loader-cap"></p>
+    </div>
+
     <canvas id="gl" aria-label="36.5 도시 3D 화면"></canvas>
     <div id="labels" aria-hidden="true"></div>
 

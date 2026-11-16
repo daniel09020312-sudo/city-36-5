@@ -19,9 +19,11 @@ import { createRegulation } from './districts/regulation.js';
 import { createDignity } from './districts/dignity.js';
 import { createFinale } from './districts/finale.js';
 import { planParks, createGreens } from './world/greens.js';
+import { mountLoader } from './ui/loader.js';
 import { SCENES } from './content/scenes.js';
 
 applyCssPalette();
+const loader = mountLoader();
 
 // 장면 카메라가 장치를 보는 시선. 이 길목의 건물은 낮게 지어 장치를 가리지 않게 한다.
 function sightlines() {
@@ -56,6 +58,7 @@ function boot() {
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
   } catch {
+    loader.fail();
     document.getElementById('fallback').hidden = false;
     return;
   }
@@ -87,6 +90,8 @@ function boot() {
     warmth.setReducedMotion(e.matches);
   });
 
+  app.loader = loader;
+  app.introGo = false;
   app.labels = new Labels(app);
   app.ui = new UI(app);
   createPlatform(app);
@@ -126,6 +131,8 @@ function boot() {
   window.addEventListener('resize', resize);
   resize();
   tour.start();
+  // 도시가 준비되면 눈금을 채우고 화면을 걷는다. 다른 장면 주소로 들어온 경우는 짧게 보여 준다.
+  loader.run(app, { quick: tour.index !== 0 });
 
   const clock = new THREE.Clock();
   let t = 0;

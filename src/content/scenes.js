@@ -19,6 +19,7 @@ export const SITE = {
   project: '이상사회 프로젝트',
   enter: '도시로 들어가기',
   hint: '← → 키로 넘길 수 있습니다',
+  loading: { unit: '℃', caption: '도시의 체온을 맞추는 중', ready: '36.5 · 균형' },
   tour: '투어',
   free: '자유 탐험',
   prev: '이전',

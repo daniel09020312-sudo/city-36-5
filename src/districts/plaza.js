@@ -1,4 +1,4 @@
-// 시상 하부 광장: 심전도 지평선(인트로), 과열의 입구, 체온탑.
+// 중앙 광장: 인트로(도시가 솟는 연출), 도시 밖 거리, 체온탑.
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { C, PALETTE } from '../config/palette.js';
@@ -6,9 +6,8 @@ import { SITES, DISTRICTS } from '../config/layout.js';
 import { SCENES } from '../content/scenes.js';
 import { warmth } from '../core/warmth.js';
 import { rng, clamp, smooth } from '../core/rng.js';
-import { ecg, R_PHASE } from '../math/ecg.js';
 import { step, tone, SET_POINT, KICK_INTERVAL, KICK_TARGETS } from '../math/thermo.js';
-import { box, prop, boxGeo, plate, makeRibbon, glowMaterial, edgeMaterial } from '../world/props.js';
+import { box, prop, boxGeo, plate, glowMaterial, edgeMaterial } from '../world/props.js';
 
 export function createPlaza(app) {
   const { scene, buildings, citizens, ui } = app;
@@ -295,64 +294,43 @@ export function createPlaza(app) {
     },
   };
 
-  // ═══ 인트로: 심전도 지평선 ═════════════════════════
-  const N = 900;
-  const X0 = -98;
-  const X1 = 98;
-  const PERIOD = 35;
-  const linePts = Array.from({ length: N }, (_, i) => {
-    const x = X0 + ((X1 - X0) * i) / (N - 1);
-    const amp = 8.5 + 7.5 * Math.exp(-((x / 34) ** 2));
-    return new THREE.Vector3(x, 1.4 + amp * ecg(x / PERIOD + R_PHASE), 74);
-  });
-  const lineMat = new THREE.MeshBasicMaterial({ color: PALETTE.amber, fog: false, transparent: true, side: THREE.DoubleSide });
-  const ribbon = makeRibbon(linePts, 0.26, new THREE.Vector3(0, 0, 1), lineMat);
-  ribbon.visible = false;
-  scene.add(ribbon);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 12), lineMat);
-  head.visible = false;
-  scene.add(head);
+  // ═══ 인트로: 로딩 화면이 걷히면 도시가 가운데에서 바깥으로 솟는다 ═══
+  let it = 0;
   let introShown = false;
   let riseDone = false;
-  const setRise = (headX) => {
-    if (headX === null) {
+  const setRise = (radius) => {
+    if (radius === null) {
       buildings.setRise(null);
       for (const g of app.propGroups) g.group.scale.y = 1;
       return;
     }
-    buildings.setRise((b) => smooth(2, 15, headX - b.x));
-    for (const g of app.propGroups) g.group.scale.y = Math.max(0.0001, smooth(2, 15, headX - g.x));
+    // 반경 radius 안쪽 건물부터 차례로 솟는다
+    buildings.setRise((b) => smooth(-6, 16, radius - Math.hypot(b.x, b.z)));
+    for (const g of app.propGroups) g.group.scale.y = Math.max(0.0001, smooth(-6, 16, radius - Math.abs(g.x)));
   };
 
   const intro = {
     enter() {
-      gsap.killTweensOf(lineMat);
-      lineMat.opacity = 1;
-      ribbon.visible = head.visible = true;
-      ribbon.setProgress(0);
+      it = 0;
       introShown = riseDone = false;
-      setRise(X0 - 30);
+      setRise(app.introGo ? -20 : -40);
     },
     exit() {
       setRise(null);
       ui.showIntro(false);
-      gsap.to(lineMat, { opacity: 0, duration: app.reduced ? 0.01 : 1.2, onComplete: () => (ribbon.visible = head.visible = false) });
     },
-    update(dt, t, gt) {
-      const p = app.reduced ? 1 : clamp((t - 0.7) / 3.7);
-      const e = p * p * (3 - 2 * p) * 0.35 + p * 0.65;
-      ribbon.setProgress(e);
-      const hp = linePts[Math.min(N - 1, Math.floor(e * (N - 1)))];
-      head.position.copy(hp);
-      head.scale.setScalar(p < 1 ? 1 + 0.25 * Math.sin(gt * 20) : Math.max(0.001, 1 - (t - 4.4) * 2));
+    update(dt) {
+      if (!app.introGo) return; // 로딩 화면이 걷힐 때까지 기다린다
+      it += dt;
       if (!riseDone) {
-        const headX = X0 + (X1 - X0) * e;
-        if (p >= 1 && t > 6.4) {
+        const k = app.reduced ? 1 : clamp(it / 3.8);
+        const e = 1 - (1 - k) ** 2.4;
+        if (k >= 1) {
           setRise(null);
           riseDone = true;
-        } else setRise(p >= 1 ? X1 + (t - 4.4) * 40 : headX);
+        } else setRise(-20 + 190 * e);
       }
-      if (!introShown && (t > 4.6 || app.reduced)) {
+      if (!introShown && (it > 3.6 || app.reduced)) {
         introShown = true;
         ui.showIntro(true);
       }
