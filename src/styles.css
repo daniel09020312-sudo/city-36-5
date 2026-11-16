@@ -1539,3 +1539,19 @@ body[data-mode='walk'] #hud {
     bottom: calc(14px + env(safe-area-inset-bottom));
   }
 }
+
+/* 걷기: 마우스가 잠겨 있을 때 화면 가운데 작은 점 */
+#walk-ui.locked::after {
+  content: '';
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: rgba(237, 237, 237, 0.85);
+  box-shadow: 0 0 0 2px rgba(12, 12, 14, 0.5);
+  pointer-events: none;
+  z-index: 6;
+}

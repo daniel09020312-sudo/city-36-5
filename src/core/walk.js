@@ -1,5 +1,6 @@
 // 시민 시점으로 걷기.
-// 컴퓨터: W A S D 또는 방향키로 걷고(Shift는 빨리), 화면을 끌어 둘러본다. Esc로 나간다.
+// 컴퓨터: W A S D 또는 방향키로 걷고(Shift는 빨리), 마우스를 움직여 둘러본다(포인터 잠금).
+//         Esc를 한 번 누르면 마우스가 풀리고, 한 번 더 누르면 나간다.
 // 휴대폰: 왼쪽 아래를 밀어 걷고, 화면 오른쪽을 끌어 둘러본다.
 import * as THREE from 'three';
 import { SITE } from '../scenes.js';
@@ -28,7 +29,8 @@ export class Walk {
     this.touch = matchMedia('(pointer: coarse)').matches;
 
     this.ui = document.getElementById('walk-ui');
-    this.ui.querySelector('#walk-hint').textContent = this.touch ? SITE.walkHint.touch : SITE.walkHint.desktop;
+    this.hint = this.ui.querySelector('#walk-hint');
+    this.hint.textContent = this.touch ? SITE.walkHint.touch : SITE.walkHint.desktop;
     const exit = this.ui.querySelector('#walk-exit');
     exit.textContent = SITE.walkHint.exit;
     exit.addEventListener('click', () => app.tour.setMode('tour'));
@@ -47,8 +49,29 @@ export class Walk {
     window.addEventListener('blur', () => this.keys.clear());
 
     const dom = app.renderer.domElement;
+    this.dom = dom;
+    // 마우스: 화면을 누르면 포인터가 잠기고, 마우스를 움직이는 대로 시선이 돈다
+    this.canLock = 'requestPointerLock' in dom;
+    document.addEventListener('pointerlockchange', () => {
+      const locked = document.pointerLockElement === dom;
+      this.ui.classList.toggle('locked', locked);
+      if (!this.on || this.touch) return;
+      this.hint.textContent = locked ? SITE.walkHint.desktop : SITE.walkHint.paused;
+      if (!locked) this.keys.clear();
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!this.on || this.touch) return;
+      if (this.canLock && document.pointerLockElement !== dom) return;
+      // 오른쪽으로 움직이면 오른쪽으로, 위로 움직이면 위로 본다
+      this.yaw -= e.movementX * 0.0022;
+      this.pitch = Math.max(-0.75, Math.min(0.85, this.pitch - e.movementY * 0.0022));
+    });
     dom.addEventListener('pointerdown', (e) => {
       if (!this.on) return;
+      if (e.pointerType === 'mouse') {
+        this.lock();
+        return;
+      }
       // 휴대폰에서 화면 왼쪽 40%는 조이스틱, 나머지는 둘러보기
       if (e.pointerType === 'touch' && e.clientX < window.innerWidth * 0.4 && !this.pad) {
         this.pad = { id: e.pointerId, x: e.clientX, y: e.clientY };
@@ -100,17 +123,29 @@ export class Walk {
     this.app.particles.resize(window.innerHeight * renderer.getPixelRatio(), fov);
   }
 
+  lock() {
+    if (!this.canLock || document.pointerLockElement === this.dom) return;
+    try {
+      const p = this.dom.requestPointerLock();
+      p?.catch?.(() => {});
+    } catch {
+      /* 잠금을 못 하는 환경이면 잠그지 않고 걷기만 한다 */
+    }
+  }
+
   start() {
     this.on = true;
     this.keys.clear();
     this.setFov(FOV);
     this.app.camera.clearViewOffset();
     this.ui.classList.add('on');
+    if (!this.touch) this.lock(); // 걷기 버튼을 누른 그 순간에 바로 잠근다
     // 처음 자리가 건물 안이면 가까운 빈 곳으로 옮긴다
     for (let r = 0; this.blocked(this.x, this.z) && r < 40; r += 0.5) this.z += 0.5;
   }
 
   stop() {
+    if (document.pointerLockElement === this.dom) document.exitPointerLock();
     this.on = false;
     this.keys.clear();
     this.look = this.pad = null;
