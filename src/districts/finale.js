@@ -1,12 +1,10 @@
 // 한계 시뮬레이션과 엔딩.
 import * as THREE from 'three';
 import gsap from 'gsap';
-import { C, PALETTE } from '../config/palette.js';
-import { SCENES } from '../content/scenes.js';
+import { C, PALETTE } from '../palette.js';
+import { SCENES } from '../scenes.js';
 import { warmth } from '../core/warmth.js';
 import { clamp, smooth, damp } from '../core/rng.js';
-import { ecg, R_PHASE } from '../math/ecg.js';
-import { makeRibbon } from '../world/props.js';
 
 export function createFinale(app) {
   const { scene, ui } = app;
@@ -50,7 +48,7 @@ export function createFinale(app) {
 
   const limits = {
     enter() {
-      const t = SCENES[12].t;
+      const t = SCENES[7].t.limits;
       strength = 0.15;
       protect = false;
       progress = 0;
@@ -72,7 +70,7 @@ export function createFinale(app) {
       const st = ui.stats([{ label: t.heard, tone: 'red' }, { label: t.buried, tone: 'blue' }], 2);
       const bar = ui.html('', `<div class="bar-cap"><span>${t.progress}</span><span>${t.cap}</span></div><div class="bar"><i></i><em style="right:0"></em></div>`);
       const head = ui.headline('', 'amber');
-      ui.cards(t.others.map((o) => ({ html: `<span>${o}</span>` })));
+      ui.button(t.finish, () => combo.go(1), { primary: true });
       lUI = { st, fill: bar.querySelector('.bar i'), head };
     },
     exit() {
@@ -83,7 +81,7 @@ export function createFinale(app) {
       }
     },
     update(dt, t, gt) {
-      const tx = SCENES[12].t;
+      const tx = SCENES[7].t.limits;
       let heard = 0;
       signals.forEach((s, i) => {
         // 판정이 늦어질수록 보호받지 못한 신호는 식어 묻힌다
@@ -110,45 +108,51 @@ export function createFinale(app) {
     },
   };
 
-  // ═══ 엔딩 ══════════════════════════════════════════
-  const N = 520;
-  const X0 = -112;
-  const X1 = 112;
-  const pts = Array.from({ length: N }, (_, i) => v3(X0 + ((X1 - X0) * i) / (N - 1), 2, 80));
-  const lineMat = new THREE.MeshBasicMaterial({ color: PALETTE.amber, fog: false, transparent: true, side: THREE.DoubleSide });
-  const ribbon = makeRibbon(pts, 0.38, v3(0, 0.35, 1).normalize(), lineMat);
-  ribbon.visible = false;
-  scene.add(ribbon);
-  let shown = false;
-
-  const ending = {
+  // ═══ 마무리: 건물은 회색 그대로, 시민만 주황으로 ═══
+  const endingPart = {
+    timer: 0,
     enter() {
-      shown = false;
-      gsap.killTweensOf(lineMat);
-      lineMat.opacity = 1;
-      ribbon.visible = true;
-      ribbon.setProgress(0);
-      // 건물은 무채색 그대로, 시민 전원만 따뜻해진다 (마스크를 도시 전체로)
+      app.ui.setPanelHidden(true);
+      app.citizens.setProgress(1);
       warmth.focus(0, { x: 0, y: 0, z: 0 }, 130, { dur: 6, delay: 0.6, ease: 'power1.inOut' });
+      this.timer = setTimeout(() => {
+        if (app.tour.mode === 'tour') app.ui.showEnding(true);
+      }, app.reduced ? 0 : 1800);
     },
     exit() {
-      ui.showEnding(false);
-      gsap.to(lineMat, { opacity: 0, duration: app.reduced ? 0.01 : 0.8, onComplete: () => (ribbon.visible = false) });
+      clearTimeout(this.timer);
+      app.ui.showEnding(false);
+      app.ui.setPanelHidden(false);
+      app.citizens.setProgress(SCENES[7].warm);
     },
-    update(dt, t, gt) {
-      // 안정된 리듬의 심전도가 도시 앞을 가로지른다
-      for (let i = 0; i < N; i++) {
-        const p = pts[i];
-        p.y = 2.5 + 11 * ecg((p.x - gt * 9) / 38 + R_PHASE);
-      }
-      ribbon.setPoints(pts);
-      ribbon.setProgress(app.reduced ? 1 : clamp((t - 0.8) / 3.2));
-      if (!shown && (t > 4.2 || app.reduced) && app.tour.mode === 'tour') {
-        shown = true;
-        ui.showEnding(true);
-      }
-    },
+    update() {},
   };
 
-  return { 12: limits, 13: ending };
+  // ═══ 마지막 장면: 두 부분(한계 → 마무리) ═══
+  const subs = [limits, endingPart];
+  const combo = {
+    cur: null,
+    enter() {
+      this.go(0, true);
+    },
+    go(i, first = false) {
+      this.cur?.exit?.();
+      if (!first) app.tour.clearStage();
+      ui.clearControls();
+      ui.partTabs(SCENES[7].parts, i, (k) => this.go(k));
+      this.cur = subs[i];
+      this.cur.enter();
+      if (!first) app.tour.flyTo(SCENES[7].parts[i].cam, 3);
+    },
+    exit() {
+      this.cur?.exit?.();
+      this.cur = null;
+    },
+    update(dt, t, gt) {
+      this.cur?.update?.(dt, t, gt);
+    },
+  };
+  ui.onPartBack = () => combo.go(0);
+
+  return { 7: combo };
 }

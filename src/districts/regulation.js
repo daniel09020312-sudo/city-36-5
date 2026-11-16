@@ -1,9 +1,9 @@
 // 조절 지구: 별아교 숲 · 흥분독성 경보탑, 고개 드는 거리, 워터마크 전광판.
 import * as THREE from 'three';
 import gsap from 'gsap';
-import { C, PALETTE } from '../config/palette.js';
+import { C, PALETTE } from '../palette.js';
 import { SITES, DISTRICTS } from '../config/layout.js';
-import { SCENES } from '../content/scenes.js';
+import { SCENES } from '../scenes.js';
 import { warmth } from '../core/warmth.js';
 import { rng, clamp, damp } from '../core/rng.js';
 import { box, prop, plate, glowMaterial, lineMaterial, edgeMaterial } from '../world/props.js';
@@ -149,7 +149,7 @@ export function createRegulation(app) {
         const dist = dir.length();
         dir.multiplyScalar(1 / Math.max(dist, 1e-4));
         q.v.lerp(dir, q.s === 1 ? 1 - Math.exp(-4.5 * dt) : 1 - Math.exp(-9 * dt)).normalize();
-        q.p.addScaledVector(q.v, 8.5 * dt);
+        q.p.addScaledVector(q.v, (astro ? 4.6 : 8.5) * dt);
         if (dist < 0.5) {
           if (q.s === 1) {
             q.s = 2;
@@ -211,7 +211,7 @@ export function createRegulation(app) {
   let fLabels = [];
   const forest = {
     enter() {
-      const t = SCENES[6].t;
+      const t = SCENES[4].t.forest;
       resetForest();
       ui.toggle({ label: t.toggle, value: app.state.astro, onChange: (v) => (app.state.astro = v) });
       ui.slider({ label: t.slider, min: 20, max: 160, step: 5, value: intensity, format: (v) => `${Math.round((v / 160) * 100)}<small>%</small>`, onInput: (v) => (intensity = v) });
@@ -219,8 +219,8 @@ export function createRegulation(app) {
       warmth.focus(0, { x: F.x, y: 2, z: F.z }, 14.5, { dur: 1.5, delay: 0.8 });
       fLabels = [
         app.labels.add(t.incoming, { x: F.x + 6.5, y: 13.5, z: F.z + 3 }, { kind: 'tag', tone: 'red' }),
-        app.labels.add(t.collect, { x: stars[0].x, y: STAR_Y + 1.6, z: stars[0].z }, { kind: 'tag', tone: 'amber' }).show(false),
-        app.labels.add(t.back, { x: stars[1].x + 1.6, y: 5.2, z: stars[1].z + 2.2 }, { kind: 'tag', tone: 'amber' }).show(false),
+        app.labels.add(t.checking, { x: stars[0].x, y: STAR_Y + 1.6, z: stars[0].z }, { kind: 'tag', tone: 'amber' }).show(false),
+        app.labels.add(t.slowed, { x: stars[1].x + 1.6, y: 5.2, z: stars[1].z + 2.2 }, { kind: 'tag', tone: 'amber' }).show(false),
       ];
     },
     exit() {
@@ -229,7 +229,7 @@ export function createRegulation(app) {
     },
     update(dt, t, gt) {
       const hot = updateForest(dt, gt, neurons);
-      const tx = SCENES[6].t;
+      const tx = SCENES[4].t.forest;
       const warn = hot >= 3;
       app.alertTower.set(warn, gt);
       fstats.set(0, `${hot}<small> / ${neurons.length}</small>`, hot ? 'red' : '');
@@ -239,95 +239,10 @@ export function createRegulation(app) {
     },
   };
 
-  // ═══ 고개 드는 거리 ════════════════════════════════
-  const S = SITES.street;
-  plate(group, { x: S.x, z: S.z, w: 18.4, d: 3.6 });
-  const srand = rng(88);
-  for (let x = S.x - 8; x <= S.x + 8.1; x += 3.2) {
-    // 카메라 쪽(+z)은 비워 두고, 건너편에만 상가 건물을 세운다
-    buildings.add({ x, z: S.z - 3.7, w: 2.5 + srand() * 0.4, d: 2.3 + srand() * 0.5, h: 3 + srand() * 4.5, shape: srand() > 0.6 ? 'step' : 'box' });
-  }
-  const PAIRS = 14;
-  const walkers = citizens.claim(PAIRS * 2).map((id, k) => {
-    const pair = Math.floor(k / 2);
-    const front = k % 2 === 0;
-    const x = S.x - 7.4 + pair * 1.14 + (srand() - 0.5) * 0.25;
-    const z = S.z + (front ? -0.62 : 0.62);
-    const yaw = front ? 0 : Math.PI;
-    citizens.setHome(id, x, z, 0, yaw);
-    return { id, pair, x, z, yaw, up: 0 };
-  });
-  // 손에 든 화면(블루)
-  const phoneGeo = new THREE.PlaneGeometry(0.15, 0.22);
-  phoneGeo.rotateX(-1.0);
-  const phones = new THREE.InstancedMesh(phoneGeo, new THREE.MeshBasicMaterial({ color: PALETTE.blue, side: THREE.DoubleSide }), walkers.length);
-  phones.frustumCulled = false;
-  phones.visible = false;
-  group.add(phones);
-  const pm = new THREE.Matrix4();
-  const pq = new THREE.Quaternion();
-  const pe = new THREE.Euler();
-  const ps = v3(1, 1, 1);
-  const pp = v3(0, 0, 0);
-  let liftAt = 0;
-  let sstat = null;
-  let lastAstro = false;
-
-  const street = {
-    enter() {
-      const t = SCENES[7].t;
-      ui.toggle({ label: t.toggle, value: app.state.astro, onChange: (v) => (app.state.astro = v) });
-      sstat = ui.stats([{ label: t.looking }], 1);
-      phones.visible = true;
-      for (const w of walkers) {
-        w.up = 0;
-        citizens.hold(w.id, w.x, 0, w.z, w.yaw);
-        citizens.tbow[w.id] = 1;
-        citizens.aBow.array[w.id] = 1;
-      }
-      lastAstro = app.state.astro;
-      liftAt = 2.2; // 앞 장면에서 이미 켜 두었다면 조금 뒤에 고개를 든다
-      warmth.focus(0, { x: S.x, y: 0.5, z: S.z }, 13, { dur: 1.4, delay: 0.6 });
-      app.labels.add(t.screen, { x: S.x - 8.6, y: 1.9, z: S.z }, { kind: 'plain', tone: 'blue' });
-    },
-    exit() {
-      phones.visible = false;
-    },
-    update(dt, t) {
-      if (app.state.astro !== lastAstro) {
-        lastAstro = app.state.astro;
-        liftAt = t;
-      }
-      let up = 0;
-      let np = 0;
-      walkers.forEach((w, k) => {
-        // 한쪽 끝에서부터 차례로 고개를 든다
-        const want = app.state.astro && t > liftAt + w.pair * 0.16 ? 1 : !app.state.astro && t > liftAt + (PAIRS - w.pair) * 0.08 ? 0 : w.up > 0.5 ? 1 : 0;
-        w.up = damp(w.up, want, 3.2, dt);
-        if (w.up > 0.6) up++;
-        citizens.tbow[w.id] = 1 - w.up;
-        if (w.up < 0.5) citizens.override(w.id, C.blue, 0.7 * (1 - w.up * 2));
-        else citizens.override(w.id, C.amber, (w.up - 0.5) * 2);
-        const s = Math.max(0.0001, 1 - w.up * 1.6);
-        const f = w.yaw === 0 ? 1 : -1;
-        pm.compose(pp.set(w.x, 0.4 + w.up * -0.12, w.z + f * 0.2), pq.setFromEuler(pe.set(0, w.yaw, 0)), ps.setScalar(s));
-        phones.setMatrixAt(k, pm);
-        // 화면에서 올라오는 자극
-        if (w.up < 0.3 && np < 200 && (k + Math.floor(t * 3)) % 3 === 0) {
-          const ph = (t * 0.9 + k * 0.37) % 1;
-          app.particles.set(np++, w.x + Math.sin(k) * 0.1, 0.5 + ph * 0.45, w.z + f * 0.2, C.blue, 0.07 * (1 - ph));
-        }
-      });
-      phones.instanceMatrix.needsUpdate = true;
-      app.particles.commit(np);
-      sstat.set(0, `${up}<small> / ${walkers.length}명</small>`, up ? 'amber' : 'blue');
-    },
-  };
-
   // ═══ 워터마크 전광판 ═══════════════════════════════
   const W = SITES.boards;
   plate(group, { x: W.x, z: W.z, r: 8.6 });
-  const camAz = (SCENES[8].cam.az * Math.PI) / 180;
+  const camAz = (SCENES[4].parts[1].cam.az * Math.PI) / 180;
   const normal = v3(Math.sin(camAz), 0, Math.cos(camAz)); // 전광판이 바라보는 쪽(카메라 쪽)
   const right = v3(Math.cos(camAz), 0, -Math.sin(camAz));
   const BW = 7.2;
@@ -335,7 +250,7 @@ export function createRegulation(app) {
   const LENS_R = 1.7;
   const lensU = { value: v3(0, -99, 0) };
   const fadeU = { value: 0 };
-  const boardDefs = SCENES[8].t.boards;
+  const boardDefs = SCENES[4].t.board.boards;
   const slots = [
     { r: -4.4, y: 8.7, n: -1.2 },
     { r: 3.6, y: 7.2, n: 0.8 },
@@ -436,7 +351,7 @@ export function createRegulation(app) {
 
   const boardsScene = {
     enter() {
-      const t = SCENES[8].t;
+      const t = SCENES[4].t.board;
       fadeU.value = 0;
       idle = 99;
       lensRing.visible = true;
@@ -474,7 +389,7 @@ export function createRegulation(app) {
       this.pointerMove(ray);
     },
     update(dt, t, gt) {
-      const tx = SCENES[8].t;
+      const tx = SCENES[4].t.board;
       idle += dt;
       if (idle > 3.5) {
         // 손을 대지 않으면 렌즈가 저절로 전광판을 훑는다
@@ -497,5 +412,40 @@ export function createRegulation(app) {
     },
   };
 
-  return { 6: forest, 7: street, 8: boardsScene };
+  // ═══ 조절 구역: 두 부분(① 비난이 몰릴 때 ② AI가 쓴 글) ═══
+  const subs = [forest, boardsScene];
+  const regulation = {
+    cur: null,
+    enter() {
+      app.state.astro = false;
+      this.go(0, true);
+    },
+    go(i, first = false) {
+      this.cur?.exit?.();
+      if (!first) app.tour.clearStage();
+      ui.clearControls();
+      ui.partTabs(SCENES[4].parts, i, (k) => this.go(k));
+      this.cur = subs[i];
+      this.cur.enter();
+      if (!first) app.tour.flyTo(SCENES[4].parts[i].cam);
+    },
+    exit() {
+      this.cur?.exit?.();
+      this.cur = null;
+    },
+    update(dt, t, gt) {
+      this.cur?.update?.(dt, t, gt);
+    },
+    pointerMove(ray, e) {
+      this.cur?.pointerMove?.(ray, e);
+    },
+    click(ray, e) {
+      this.cur?.click?.(ray, e);
+    },
+    pointerLeave() {
+      this.cur?.pointerLeave?.();
+    },
+  };
+
+  return { 4: regulation };
 }

@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { makeWarmMaterial } from '../core/warmth.js';
-import { C, PALETTE } from '../config/palette.js';
+import { C, PALETTE } from '../palette.js';
 import { GRID, R_CITY, isWalkable } from '../config/layout.js';
 import { rng, damp } from '../core/rng.js';
 

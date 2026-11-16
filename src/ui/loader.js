@@ -1,6 +1,6 @@
 // 첫 로딩 화면: 도시를 준비하는 동안 체온계 눈금이 20℃에서 36.5℃까지 차오른다.
 // 글은 src/content/scenes.js 의 SITE.loading 에 있다.
-import { SITE } from '../content/scenes.js';
+import { SITE } from '../scenes.js';
 
 const START = 20; // ℃
 const END = 36.5; // ℃ (눈금의 끝은 40℃)

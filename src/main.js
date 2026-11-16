@@ -2,7 +2,7 @@
 import './styles.css';
 import * as THREE from 'three';
 import gsap from 'gsap';
-import { applyCssPalette, PALETTE } from './config/palette.js';
+import { applyCssPalette, PALETTE } from './palette.js';
 import { createPlatform } from './world/platform.js';
 import { Buildings } from './world/buildings.js';
 import { Citizens } from './world/citizens.js';
@@ -12,6 +12,7 @@ import { Labels } from './core/labels.js';
 import { warmth } from './core/warmth.js';
 import { createPostFX } from './core/postfx.js';
 import { Tour } from './core/tour.js';
+import { Walk } from './core/walk.js';
 import { UI } from './ui/overlay.js';
 import { createPlaza } from './districts/plaza.js';
 import { createRecovery } from './districts/recovery.js';
@@ -20,35 +21,34 @@ import { createDignity } from './districts/dignity.js';
 import { createFinale } from './districts/finale.js';
 import { planParks, createGreens } from './world/greens.js';
 import { mountLoader } from './ui/loader.js';
-import { SCENES } from './content/scenes.js';
+import { SCENES } from './scenes.js';
 
 applyCssPalette();
 const loader = mountLoader();
 
 // 장면 카메라가 장치를 보는 시선. 이 길목의 건물은 낮게 지어 장치를 가리지 않게 한다.
+// 장면의 sight(반경)와 부분(parts)의 카메라를 모두 본다.
 function sightlines() {
   const D2R = Math.PI / 180;
   const out = [];
-  const add = (cam, base, r, ty = 0, ground = null) => {
+  const add = (cam, base, r, lift = 0) => {
     const c = { ...base, ...cam };
     const el = c.el * D2R;
     const az = c.az * D2R;
     const cx = c.target[0] + c.dist * Math.cos(el) * Math.sin(az);
     const cy = c.target[1] + c.dist * Math.sin(el);
     const cz = c.target[2] + c.dist * Math.cos(el) * Math.cos(az);
-    const [tx, tz] = ground ?? [c.target[0], c.target[2]];
+    const tx = c.target[0];
+    const tz = c.target[2];
     const D = Math.hypot(cx - tx, cz - tz);
-    out.push({ tx, tz, ty, dx: (cx - tx) / D, dz: (cz - tz) / D, D, cy, r });
+    out.push({ tx, tz, ty: lift, dx: (cx - tx) / D, dz: (cz - tz) / D, D, cy, r });
   };
-  const radius = { 1: 4.5, 3: 9, 4: 14.5, 5: 15.5, 6: 13, 7: 10.5, 8: 9.5, 9: 8.5, 10: 9, 11: 11.5 };
-  const lift = { 8: 1.4 };
-  for (const [i, r] of Object.entries(radius)) {
-    const sc = SCENES[i];
-    add(sc.cam, sc.cam, r, lift[i] ?? 0);
-    if (sc.cam2) add(sc.cam2, sc.cam, r, lift[i] ?? 0);
+  for (const sc of SCENES) {
+    const list = [[sc.cam, sc.sight, 0]];
+    if (sc.cam2) list.push([sc.cam2, sc.sight, 0]);
+    for (const p of sc.parts ?? []) list.push([p.cam, p.sight ?? sc.sight, p.lift ?? 0]);
+    for (const [cam, r, lift] of list) if (r) add(cam, sc.cam, r, lift);
   }
-  // 체온탑 장면: 광장이 내려다보여야 한다
-  for (const az of [0, 14]) add({ az }, SCENES[2].cam, 12.5);
   return out;
 }
 
@@ -116,6 +116,7 @@ function boot() {
   const fx = createPostFX(renderer, scene, camera);
   app.fx = fx;
   const tour = (app.tour = new Tour(app, behaviours));
+  app.walk = new Walk(app);
 
   function resize() {
     const w = window.innerWidth;

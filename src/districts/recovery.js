@@ -1,12 +1,11 @@
 // 회복 지구: 분할 조사탑, 선별 광장, 재검의 다리 · 부활 경기장.
 import * as THREE from 'three';
-import { C, PALETTE } from '../config/palette.js';
+import { C, PALETTE } from '../palette.js';
 import { SITES, DISTRICTS } from '../config/layout.js';
-import { SCENES } from '../content/scenes.js';
+import { SCENES } from '../scenes.js';
 import { warmth } from '../core/warmth.js';
 import { rng, clamp, damp, smooth } from '../core/rng.js';
-import { TOTAL_DOSE, dosePerFraction, collateral } from '../math/bed.js';
-import { counts, ppv, sliderToP, pToSlider, repeatPosterior } from '../math/ppv.js';
+import { counts, ppv, sliderToP, pToSlider } from '../math/ppv.js';
 import { box, prop, plate, glowMaterial, lineMaterial } from '../world/props.js';
 
 export function createRecovery(app) {
@@ -57,7 +56,7 @@ export function createRecovery(app) {
   let fracParts = [];
 
   function startSim(n) {
-    sim = { n, d: dosePerFraction(n), coll: collateral(n), t: 0, hit: 0, last: -9, flash: 0, shock: 0 };
+    sim = { n, d: 0, coll: n === 1 ? 1 : 0.06, t: 0, hit: 0, last: -9, flash: 0, shock: 0 };
     target.sy = 1;
     buildings.commit(target);
     for (const b of neighbours) {
@@ -98,7 +97,7 @@ export function createRecovery(app) {
     wrongMark.position.set(F.x, topY + 1.0 + Math.sin(gt * 2) * 0.08, F.z);
     wrongMark.rotation.y = gt * 0.8;
     if (firing) {
-      const r = (0.07 + 0.62 * Math.sqrt(s.d / TOTAL_DOSE)) * (0.85 + 0.15 * Math.sin(gt * 40)) * Math.sin(Math.PI * clamp(since / beamDur)) ** 0.35;
+      const r = (s.n === 1 ? 0.7 : 0.09) * (0.85 + 0.15 * Math.sin(gt * 40)) * Math.sin(Math.PI * clamp(since / beamDur)) ** 0.35;
       hitP.y = topY;
       app.beams.set(0, emitP, hitP, r, C.red);
     } else app.beams.hide(0);
@@ -152,86 +151,30 @@ export function createRecovery(app) {
     app.particles.commit(np);
   }
 
-  // 나눌수록 둘레의 피해가 줄어드는 곡선
-  function drawChart(cv, n, t) {
-    const { ctx, w, h } = cv;
-    const L = 40;
-    const R = 12;
-    const T = 14;
-    const B = 24;
-    ctx.clearRect(0, 0, w, h);
-    const X = (k) => L + ((k - 1) / 29) * (w - L - R);
-    const Y = (c) => T + (1 - c) * (h - T - B);
-    ctx.font = '11px "Pretendard Variable", sans-serif';
-    ctx.fillStyle = '#7c7c84';
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth = 1;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    for (const c of [0, 0.5, 1]) {
-      ctx.beginPath();
-      ctx.moveTo(L, Y(c));
-      ctx.lineTo(w - R, Y(c));
-      ctx.stroke();
-      ctx.fillText(`${c * 100}%`, L - 7, Y(c));
-    }
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    for (const k of [1, 10, 20, 30]) ctx.fillText(`${k}${t.unit}`, X(k), h - B + 7);
-    ctx.beginPath();
-    for (let k = 1; k <= 30; k++) ctx[k === 1 ? 'moveTo' : 'lineTo'](X(k), Y(collateral(k)));
-    ctx.strokeStyle = '#9a9aa2';
-    ctx.lineWidth = 1.6;
-    ctx.stroke();
-    const col = n <= 3 ? PALETTE.red : PALETTE.amber;
-    ctx.beginPath();
-    ctx.moveTo(X(n), Y(collateral(n)));
-    ctx.lineTo(X(n), h - B);
-    ctx.strokeStyle = col;
-    ctx.globalAlpha = 0.45;
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    ctx.beginPath();
-    ctx.arc(X(n), Y(collateral(n)), 5.5, 0, Math.PI * 2);
-    ctx.fillStyle = col;
-    ctx.shadowColor = col;
-    ctx.shadowBlur = 14;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  }
-
   const fraction = {
     enter() {
-      const t = SCENES[3].t;
-      let n = 1;
-      const show = () => {
-        st.set(0, `${Math.round(100 / n)}<small>%</small>`, n <= 3 ? 'red' : '');
-        st.set(1, `${Math.round(collateral(n) * 100)}<small>%</small>`, n <= 3 ? 'red' : 'amber');
-        drawChart(cv, n, t);
+      const t = SCENES[3].t.split;
+      let mode = 'once';
+      const start = () => {
+        clearTimeout(simTimer);
+        startSim(mode === 'once' ? 1 : 30);
+        sim.t = -0.6;
       };
-      const sl = ui.slider({
-        label: t.slider,
-        min: 1,
-        max: 30,
-        value: 1,
-        format: (v) => `${v}<small>${t.unit}</small> · ${v === 1 ? t.once : t.split}`,
-        ends: [t.once, `30${t.unit}`],
-        onInput: (v) => {
-          n = v;
-          show();
-          clearTimeout(simTimer);
-          simTimer = setTimeout(() => startSim(n), 220);
+      ui.segmented(
+        [{ key: 'once', label: t.once }, { key: 'split', label: t.split }],
+        mode,
+        (m) => {
+          mode = m;
+          note.textContent = m === 'once' ? t.onceNote : t.splitNote;
+          start();
         },
-      });
-      const st = ui.stats([{ label: t.dose }, { label: t.harm }], 2);
-      const cv = ui.canvas(132, t.chart);
-      ui.button(t.fire, () => startSim(n));
-      fracUI = { sl };
-      show();
+      );
+      const note = ui.note(t.onceNote);
+      ui.button(t.fire, start);
       target.heat = 0.95;
       wrongMark.visible = true;
       startSim(1);
-      sim.t = -1.4; // 카메라가 도착한 뒤에 쏜다
+      sim.t = -1.4; // 카메라가 도착한 뒤에 내린다
       warmth.focus(0, { x: F.x, y: 2, z: F.z }, 9.5, { dur: 1.4, delay: 1 });
       app.labels.add(t.wrong, { x: F.x, y: 8.6, z: F.z }, { kind: 'plain', tone: 'red' });
     },
@@ -270,7 +213,7 @@ export function createRecovery(app) {
 
   const screening = {
     enter() {
-      const t = SCENES[4].t;
+      const t = SCENES[3].t.screen;
       citizens.suppress(true);
       for (let i = 0; i < N; i++) {
         const col = i % COLS;
@@ -324,241 +267,30 @@ export function createRecovery(app) {
     update() {},
   };
 
-  // ═══ 재검의 다리 · 부활 경기장 ═════════════════════
-  const BA = SITES.bridgeA;
-  const BB = SITES.bridgeB;
-  const BZ = BA.z;
-  const XC = (BA.x + BB.x) / 2;
-  const arch = (x) => 0.62 * Math.max(0, 1 - ((x - XC) / 5.25) ** 2);
-  // 물길(어두운 띠)
-  plate(group, { x: XC, z: BZ, w: 4.6, d: 12.6, color: '#0A0A0C', y: 0.025 });
-  plate(group, { x: BA.x - 3.4, z: BZ, w: 4.6, d: 4, y: 0.02 });
-  for (let k = 0; k < 10; k++) {
-    const x0 = XC - 5.2 + k * 1.04;
-    const xm = x0 + 0.52;
-    const seg = box(1.1, 0.14, 1.75, { h: 9 });
-    seg.position.set(xm, arch(xm) - 0.07, BZ);
-    seg.rotation.z = Math.atan2(arch(x0 + 1.04) - arch(x0), 1.04);
-    group.add(seg);
-  }
-  const GATE_X = [XC - 2, XC + 2];
-  const lamps = GATE_X.map((gx) => {
-    const y0 = arch(gx);
-    for (const s of [-1, 1]) {
-      const post = box(0.16, 2.3, 0.16, { h: 11 });
-      post.position.set(gx, y0, BZ + s * 0.95);
-      group.add(post);
-    }
-    const lintel = box(0.22, 0.22, 2.2, { h: 11 });
-    lintel.position.set(gx, y0 + 2.3, BZ);
-    group.add(lintel);
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.16, 0.9), new THREE.MeshBasicMaterial({ color: '#4a4a50' }));
-    lamp.position.set(gx, y0 + 2.2, BZ);
-    group.add(lamp);
-    lamp.userData.on = 0;
-    return lamp;
-  });
-
-  const queueIds = citizens.claim(12);
-  const queueSpot = (k) => ({ x: BA.x - 1.6 - Math.floor(k / 2) * 0.75, z: BZ + (k % 2 ? 0.42 : -0.42) });
-  queueIds.forEach((id, k) => {
-    const q = queueSpot(k);
-    citizens.setHome(id, q.x, q.z, 0, Math.PI / 2);
-  });
-  const OUTCOMES = [0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0]; // 1 = 확정
-
-  // 피구 코트
-  const CT = SITES.court;
-  const CW = 11;
-  const CD = 6.4;
-  const courtPlate = plate(group, { x: CT.x, z: CT.z, w: CW, d: CD, color: '#232327' });
-  courtPlate.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([v3(0, 0.006, -CD / 2), v3(0, 0.006, CD / 2)]), lineMaterial));
-  const playerIds = citizens.claim(10);
-  const prnd = rng(9);
-  const players = playerIds.map((id, k) => {
-    const team = k < 5 ? 0 : 1;
-    const bx = CT.x + (team ? 1 : -1) * (1.2 + prnd() * 3.6);
-    const bz = CT.z + (prnd() - 0.5) * (CD - 1.2);
-    citizens.setHome(id, bx, bz, 0, team ? -Math.PI / 2 : Math.PI / 2);
-    return { id, team, bx, bz, out: false, since: 0, ph: prnd() * 9, slot: k % 5 };
-  });
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), new THREE.MeshBasicMaterial({ color: '#d4d4da' }));
-  ball.visible = false;
-  group.add(ball);
-
-  let walkers = [];
-  let sent = 0;
-  let cleared = 0;
-  let confirmed = 0;
-  let revived = 0;
-  let bstats = null;
-  let game = null;
-  const from = v3(0, 0, 0);
-  const to = v3(0, 0, 0);
-
-  function resetQueue() {
-    walkers = [];
-    sent = cleared = confirmed = 0;
-    queueIds.forEach((id, k) => {
-      const q = queueSpot(k);
-      citizens.clearOverride(id);
-      citizens.teleport(id, q.x, 0, q.z, Math.PI / 2);
-      citizens.hold(id, q.x, 0, q.z, Math.PI / 2, 2.1);
-      citizens.mark(id, C.red);
-    });
-  }
-  function sendNext() {
-    if (sent >= queueIds.length) resetQueue();
-    const k = sent++;
-    const id = queueIds[k];
-    const path = [{ x: BA.x - 0.9, y: 0, z: BZ }];
-    for (let x = XC - 5; x <= XC + 5.01; x += 1) {
-      const p = { x, y: arch(x) + 0.02, z: BZ };
-      if (Math.abs(x - GATE_X[0]) < 0.01) p.gate = 0;
-      if (Math.abs(x - GATE_X[1]) < 0.01) p.gate = 1;
-      path.push(p);
-    }
-    path.push({ x: BB.x + 0.9, y: 0, z: BZ, end: true });
-    walkers.push({ id, k, path, i: 0, wait: 0, bad: OUTCOMES[k % OUTCOMES.length] });
-    citizens.hold(id, path[0].x, path[0].y, path[0].z, Math.PI / 2, 2.3);
-    // 뒤에 선 사람들이 한 칸씩 당겨 선다
-    for (let j = sent; j < queueIds.length; j++) {
-      const q = queueSpot(j - sent);
-      citizens.hold(queueIds[j], q.x, 0, q.z, Math.PI / 2, 1.6);
-    }
-  }
-  function updateWalkers(dt) {
-    for (const w of walkers) {
-      if (w.done) continue;
-      if (w.wait > 0) {
-        w.wait -= dt;
-        continue;
-      }
-      if (!citizens.arrived(w.id, 0.07)) continue;
-      const p = w.path[w.i];
-      if (p.gate !== undefined && !p.passed) {
-        // 게이트에서 멈춰 검증을 받는다. 그동안 표시는 회색(보류)
-        p.passed = true;
-        w.wait = 0.75;
-        lamps[p.gate].userData.on = 1;
-        citizens.mark(w.id, C.citizen);
-        continue;
-      }
-      if (p.end) {
-        w.done = true;
-        if (w.bad) {
-          confirmed++;
-          citizens.mark(w.id, C.red);
-          citizens.hold(w.id, BB.x + 1.3 + (confirmed - 1) * 0.8, 0, BZ - 3.6, Math.PI, 2);
-        } else {
-          cleared++;
-          citizens.mark(w.id, null);
-          citizens.override(w.id, C.amber, 1);
-          const n = cleared - 1;
-          citizens.hold(w.id, CT.x - CW / 2 + 0.8 + (n % 10) * 1.0, 0, CT.z + CD / 2 + 1.0 + Math.floor(n / 10) * 0.7, Math.PI, 2.4);
-        }
-        continue;
-      }
-      w.i++;
-      const q = w.path[w.i];
-      citizens.hold(w.id, q.x, q.y, q.z, Math.PI / 2, 2.3);
-    }
-    for (const l of lamps) {
-      l.userData.on = Math.max(0, l.userData.on - dt * 1.3);
-      l.material.color.setScalar(0.07 + 0.8 * l.userData.on);
-    }
-  }
-
-  // 피구: 맞으면 아웃, 우리 편이 상대를 맞히면 한 명이 부활한다
-  function resetGame() {
-    revived = 0;
-    for (const p of players) {
-      p.out = false;
-      citizens.clearOverride(p.id);
-    }
-    game = { holder: players[0], flight: null, wait: 1.6, rand: rng(17) };
-  }
-  function updateGame(dt, gt) {
-    const g = game;
-    const active = (team) => players.filter((p) => p.team === team && !p.out);
-    for (const p of players) {
-      if (p.out) {
-        const side = p.team ? 1 : -1;
-        citizens.hold(p.id, CT.x + side * (1.2 + p.slot * 0.85), 0, CT.z - CD / 2 - 1.1, 0, 2.6);
-      } else {
-        const dodge = g.flight && g.flight.target === p ? Math.sin(gt * 9) * 0.25 : 0;
-        citizens.hold(p.id, p.bx + Math.sin(gt * 0.9 + p.ph) * 0.35, 0, p.bz + Math.cos(gt * 1.1 + p.ph * 2) * 0.4 + dodge, p.team ? -Math.PI / 2 : Math.PI / 2, 2.8);
-      }
-    }
-    if (g.flight) {
-      const f = g.flight;
-      f.t += dt / f.dur;
-      citizens.at(f.target.id, to);
-      const k = clamp(f.t);
-      ball.position.set(f.from.x + (to.x - f.from.x) * k, 0.55 + Math.sin(Math.PI * k) * 1.5, f.from.z + (to.z - f.from.z) * k);
-      if (f.t >= 1) {
-        const foes = active(f.target.team);
-        const hit = foes.length > 1 && g.rand() < 0.62;
-        if (hit) {
-          f.target.out = true;
-          // 부활 규칙: 맞힌 팀의 아웃된 선수 한 명이 돌아온다
-          const back = players.find((p) => p.team === f.thrower.team && p.out);
-          if (back) {
-            back.out = false;
-            revived++;
-            citizens.override(back.id, C.amber, 1);
-            const lab = app.labels.add(SCENES[5].t.revived, { x: back.bx, y: 1.5, z: back.bz }, { kind: 'plain', tone: 'amber' });
-            setTimeout(() => lab.remove(), 1600);
-          }
-        }
-        const team = active(f.target.team);
-        g.holder = hit ? team[Math.floor(g.rand() * team.length)] : f.target;
-        g.flight = null;
-        g.wait = 0.7 + g.rand() * 0.5;
-      }
-    } else {
-      citizens.at(g.holder.id, from);
-      ball.position.set(from.x, 0.62, from.z);
-      g.wait -= dt;
-      if (g.wait <= 0) {
-        const foes = active(1 - g.holder.team);
-        const tg = foes[Math.floor(g.rand() * foes.length)];
-        g.flight = { from: from.clone(), target: tg, thrower: g.holder, t: 0, dur: 0.85 };
-      }
-    }
-  }
-
-  const bridge = {
+  // ═══ 회복 구역: 두 부분(① 시민 1,000명 ② 한 번에 vs 나눠서) ═══
+  const subs = [screening, fraction];
+  const recovery = {
+    cur: null,
     enter() {
-      const t = SCENES[5].t;
-      const q = [1, 2, 3].map((k) => Math.round(repeatPosterior(0.01, k) * 100));
-      ui.button(t.send, () => sendNext(), { primary: true });
-      bstats = ui.stats([{ label: t.sent }, { label: t.cleared, tone: 'amber' }, { label: t.confirmed, tone: 'red' }, { label: t.court, tone: 'amber' }], 4);
-      ui.html('chain', `<div><b>${q[0]}%</b><span>${t.chain[0]}</span></div><i>→</i><div><b>${q[1]}%</b><span>${t.chain[1]}</span></div><i>→</i><div><b>${q[2]}%</b><span>${t.chain[2]}</span></div>`);
-      ui.note(t.chainNote);
-      resetQueue();
-      resetGame();
-      ball.visible = true;
-      GATE_X.forEach((gx, i) => app.labels.add(i ? t.gate2 : t.gate1, { x: gx, y: arch(gx) + 3.1, z: BZ }, { kind: 'plain' }));
-      warmth.focus(0, { x: CT.x - 3, y: 0, z: BZ }, 16, { dur: 1.5, delay: 0.9 });
-      this.auto = 2.2;
+      this.go(0, true);
+    },
+    go(i, first = false) {
+      this.cur?.exit?.();
+      if (!first) app.tour.clearStage();
+      ui.clearControls();
+      ui.partTabs(SCENES[3].parts, i, (k) => this.go(k));
+      this.cur = subs[i];
+      this.cur.enter();
+      if (!first) app.tour.flyTo(SCENES[3].parts[i].cam);
     },
     exit() {
-      ball.visible = false;
-      walkers = [];
-      for (const l of lamps) l.material.color.set('#4a4a50');
+      this.cur?.exit?.();
+      this.cur = null;
     },
     update(dt, t, gt) {
-      // 처음 한 명은 저절로 보낸다
-      if (this.auto > 0 && (this.auto -= dt) <= 0 && sent === 0) sendNext();
-      updateWalkers(dt);
-      updateGame(dt, gt);
-      bstats.set(0, `${sent}<small>명</small>`);
-      bstats.set(1, `${cleared}<small>명</small>`);
-      bstats.set(2, `${confirmed}<small>명</small>`);
-      bstats.set(3, `${revived}<small>회</small>`);
+      this.cur?.update?.(dt, t, gt);
     },
   };
 
-  return { 3: fraction, 4: screening, 5: bridge };
+  return { 3: recovery };
 }

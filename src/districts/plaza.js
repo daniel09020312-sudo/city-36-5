@@ -1,9 +1,9 @@
 // 중앙 광장: 인트로(도시가 솟는 연출), 도시 밖 거리, 체온탑.
 import * as THREE from 'three';
 import gsap from 'gsap';
-import { C, PALETTE } from '../config/palette.js';
+import { C, PALETTE } from '../palette.js';
 import { SITES, DISTRICTS } from '../config/layout.js';
-import { SCENES } from '../content/scenes.js';
+import { SCENES } from '../scenes.js';
 import { warmth } from '../core/warmth.js';
 import { rng, clamp, smooth } from '../core/rng.js';
 import { step, tone, SET_POINT, KICK_INTERVAL, KICK_TARGETS } from '../math/thermo.js';
@@ -358,7 +358,13 @@ export function createPlaza(app) {
     cards.forEach((c, i) => setTimeout(() => c.classList.remove('wait'), app.reduced ? 0 : 900 + i * 220));
     skyRay.k = 0;
     gsap.to(skyRay, { k: 1, duration: app.reduced ? 0.01 : 1.7, ease: 'power2.out' });
+    valueLabels.forEach((l) => l.remove());
+    valueLabels = SCENES[2].t.cards.map((c) => {
+      const d = DISTRICTS[c.key].c;
+      return app.labels.add(c.title, { x: d.x, y: 15, z: d.z }, { kind: 'district', onClick: () => app.tour.go(c.to) });
+    });
   }
+  let valueLabels = [];
   // 건물 위로 지나 세 지구에 닿는 빛 (고층 사이에서도 보이도록)
   const skyRay = { k: 0 };
   const skyFrom = new THREE.Vector3(0, TOP - 1, 0);
@@ -383,6 +389,8 @@ export function createPlaza(app) {
     gsap.killTweensOf(skyRay);
     skyRay.k = 0;
     cards.forEach((c) => c.classList.add('wait'));
+    valueLabels.forEach((l) => l.remove());
+    valueLabels = [];
   }
 
   const towerScene = {

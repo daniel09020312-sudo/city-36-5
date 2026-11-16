@@ -1,7 +1,7 @@
 // 장치(탑, 다리, 병원 같은 한 채짜리 모형)를 만드는 도우미.
 import * as THREE from 'three';
 import { makeWarmMaterial } from '../core/warmth.js';
-import { C, PALETTE } from '../config/palette.js';
+import { C, PALETTE } from '../palette.js';
 
 export const edgeMaterial = new THREE.LineBasicMaterial({
   color: PALETTE.edge,

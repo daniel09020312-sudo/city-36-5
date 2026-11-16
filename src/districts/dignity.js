@@ -1,13 +1,11 @@
-// 존엄 지구: 숨결 병원, 진전 정원, 깨어남의 계단.
+// 존엄 구역: 시립 병원(서명), 치료 결정 갈등.
 import * as THREE from 'three';
 import gsap from 'gsap';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { C, PALETTE } from '../config/palette.js';
+import { C, PALETTE } from '../palette.js';
 import { SITES, DISTRICTS } from '../config/layout.js';
-import { SCENES } from '../content/scenes.js';
+import { SCENES } from '../scenes.js';
 import { warmth } from '../core/warmth.js';
 import { rng, clamp, damp } from '../core/rng.js';
-import { FS, WINDOW, BINS, BIN_HZ, BAND, BAND_THRESHOLD, dftMagnitude, bandRatio, MODES, gaussian } from '../math/dft.js';
 import { box, prop, boxGeo, plate, glowMaterial, lineMaterial } from '../world/props.js';
 
 export function createDignity(app) {
@@ -39,7 +37,7 @@ export function createDignity(app) {
   put(box(0.1, 1.5, 0.1, { h: 8 }), H.x + 3.6, 0, H.z + 3.9);
   put(box(1.5, 0.7, 0.08, { h: 11 }), H.x + 3.6, 1.5, H.z + 3.9);
 
-  const hAz = (SCENES[9].cam.az * Math.PI) / 180;
+  const hAz = (SCENES[5].cam.az * Math.PI) / 180;
   const holoMat = new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uSigned: { value: 0 }, uBlue: { value: C.blue }, uAmber: { value: C.amber }, uShow: { value: 0 } },
     transparent: true,
@@ -96,7 +94,7 @@ export function createDignity(app) {
 
   const hospital = {
     enter() {
-      const t = SCENES[9].t;
+      const t = SCENES[5].t;
       signed = false;
       signT = -1;
       hParts = [];
@@ -137,7 +135,7 @@ export function createDignity(app) {
       hospitalParts.forEach((p) => p.heat(0));
     },
     update(dt, t, gt) {
-      const tx = SCENES[9].t;
+      const tx = SCENES[5].t;
       holoMat.uniforms.uTime.value = gt;
       holo.position.y = 11.6 + Math.sin(gt * 0.8) * 0.12;
       if (signT >= 0 && !signed) {
@@ -187,10 +185,12 @@ export function createDignity(app) {
     },
   };
 
-  // ═══ 진전 정원 ═════════════════════════════════════
+  // ═══ 치료 결정 갈등 ═══════════════════════════════
+  // 병원 정원의 벤치에 환자가 앉아 있고, 가족 둘과 의료진 하나가 둘러선다.
+  // 벤치 위의 파란 판이 AI의 예측이다. [다음 기준]으로 기준을 하나씩 적용한다.
   const G = SITES.garden;
   plate(group, { x: G.x, z: G.z, r: 8 });
-  const gAz = (SCENES[10].cam.az * Math.PI) / 180;
+  const gAz = (SCENES[6].cam.az * Math.PI) / 180;
   for (let k = 0; k < 13; k++) {
     const a = gAz + Math.PI * 0.42 + (k / 12) * Math.PI * 1.16; // 카메라 쪽은 틔워 둔다
     const hedge = box(2.5, 0.55 + (k % 3) * 0.12, 0.7, { h: 2.5 });
@@ -198,64 +198,15 @@ export function createDignity(app) {
     hedge.rotation.y = a + Math.PI / 2;
     group.add(hedge);
   }
-  // 손목 조형물
-  const PX = G.x - 1.9;
-  const PZ = G.z - 1.2;
-  put(box(2.3, 0.9, 2.3, { h: 6 }), PX, 0, PZ);
-  const arm = new THREE.Group();
-  arm.position.set(PX, 0.9, PZ);
-  arm.rotation.y = gAz;
-  group.add(arm);
-  arm.add(box(0.7, 2.3, 0.56, { h: 10 }));
-  const wrist = new THREE.Group();
-  wrist.position.y = 2.3;
-  arm.add(wrist);
-  const palm = box(0.92, 1.0, 0.36, { h: 12 });
-  palm.position.y = 0.12;
-  wrist.add(palm);
-  for (let f = 0; f < 4; f++) {
-    const finger = box(0.18, 0.62 + (f === 1 || f === 2 ? 0.14 : 0), 0.26, { h: 12 });
-    finger.position.set(-0.36 + f * 0.24, 1.12, 0);
-    wrist.add(finger);
-  }
-  const thumb = box(0.2, 0.6, 0.26, { h: 12 });
-  thumb.position.set(0.6, 0.35, 0);
-  thumb.rotation.z = -0.6;
-  wrist.add(thumb);
-  const bandMat = new THREE.MeshBasicMaterial({ color: '#5a5a62' });
-  const band = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.11, 8, 28).rotateX(Math.PI / 2), bandMat);
-  band.scale.set(1, 1, 0.82);
-  band.position.y = 2.05;
-  arm.add(band);
-  const bandGray = new THREE.Color('#5a5a62');
+  const fwd = v3(Math.sin(gAz), 0, Math.cos(gAz)); // 카메라 쪽
+  const rgt = v3(Math.cos(gAz), 0, -Math.sin(gAz)); // 화면 오른쪽
+  const at = (r, f) => v3(G.x + rgt.x * r + fwd.x * f, 0, G.z + rgt.z * r + fwd.z * f);
 
-  // 주파수 막대: 정원 바닥에서 솟는다
-  const barGeo = boxGeo(0.15, 1, 0.15);
-  const bars = new THREE.InstancedMesh(barGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), BINS);
-  bars.frustumCulled = false;
-  group.add(bars);
-  const barRight = v3(Math.cos(gAz), 0, -Math.sin(gAz));
-  const barOrigin = v3(G.x, 0, G.z).addScaledVector(v3(Math.sin(gAz), 0, Math.cos(gAz)), 3.6).addScaledVector(barRight, -4.6);
-  const barGray = new THREE.Color('#77777f');
-  const bm = new THREE.Matrix4();
-  const bq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, gAz, 0));
-  const bs = v3(1, 1, 1);
-  const bp = v3(0, 0, 0);
-  for (let k = 0; k < BINS; k++) bars.setColorAt(k, barGray);
-  // 파형 선
-  const WAVE_N = 128;
-  const wavePos = new Float32Array(WAVE_N * 3);
-  const waveGeo = new THREE.BufferGeometry();
-  waveGeo.setAttribute('position', new THREE.BufferAttribute(wavePos, 3));
-  const wave = new THREE.Line(waveGeo, new THREE.LineBasicMaterial({ color: '#b9b9c0' }));
-  wave.frustumCulled = false;
-  group.add(wave);
-
-  // 진술의 벤치
-  const benchAt = v3(G.x + 3.3, 0, G.z + 0.6);
+  // 벤치
+  const benchAt = at(0, 0.2);
   const bench = new THREE.Group();
   bench.position.copy(benchAt);
-  bench.rotation.y = gAz - 0.5;
+  bench.rotation.y = gAz;
   group.add(bench);
   const seat = box(2.1, 0.12, 0.6, { h: 10 });
   seat.position.y = 0.4;
@@ -263,299 +214,135 @@ export function createDignity(app) {
   const back = box(2.1, 0.5, 0.1, { h: 10 });
   back.position.set(0, 0.52, -0.3);
   bench.add(back);
-  for (const s of [-0.9, 0.9]) {
+  for (const sx of [-0.9, 0.9]) {
     const leg = box(0.12, 0.4, 0.5, { h: 7 });
-    leg.position.x = s;
+    leg.position.x = sx;
     bench.add(leg);
   }
-  const benchId = citizens.claim(1)[0];
-  citizens.setHome(benchId, benchAt.x, benchAt.z, 0.3, gAz - 0.5);
-  const others = citizens.claim(2);
-  others.forEach((id, k) => citizens.setHome(id, benchAt.x + 2.2 + k * 0.8, benchAt.z + 1.6 - k * 0.5, 0, gAz - 2));
 
-  const samples = new Float32Array(WINDOW);
-  const mag = new Float32Array(BINS);
-  let mode = 'rest';
-  let sampleClock = 0;
-  let sigT = 0;
-  let flagged = false;
-  let applied = false;
-  let gUI = null;
+  // 사람들: 환자(벤치), 가족 둘(왼쪽), 의료진(오른쪽)
+  const patientId = citizens.claim(1)[0];
+  citizens.setHome(patientId, benchAt.x, benchAt.z, 0.3, gAz);
+  const famIds = citizens.claim(2);
+  const famAt = [at(-2.5, 1.0), at(-3.3, 0.1)];
+  famIds.forEach((id, k) => citizens.setHome(id, famAt[k].x, famAt[k].z, 0, gAz + 0.75));
+  const docId = citizens.claim(1)[0];
+  const docAt = at(2.6, 0.9);
+  citizens.setHome(docId, docAt.x, docAt.z, 0, gAz - 0.75);
+  const others = [famIds[0], famIds[1], docId];
 
-  const garden = {
-    enter() {
-      const t = SCENES[10].t;
-      mode = 'rest';
-      applied = false;
-      flagged = false;
-      samples.fill(0);
-      const head = ui.headline('', 'blue');
-      ui.cards(t.cards.map((c) => ({ title: c.title, text: c.text })));
-      const rules = [];
-      ui.button(t.apply, () => {
-        applied = true;
-        rules.forEach((r, i) => setTimeout(() => r.classList.remove('wait'), app.reduced ? 0 : i * 380));
-        citizens.override(benchId, C.amber, 1);
-        setTimeout(() => app.ui.panel.scrollTo({ top: app.ui.panel.scrollHeight, behavior: app.reduced ? 'auto' : 'smooth' }), 120);
-      }, { primary: true });
-      rules.push(...ui.cards(t.rules.map((r, i) => ({ html: `<i>${i + 1}</i><span>${r}</span>`, cls: 'rule wait' }))));
-      gUI = {
-        head,
-        flag: app.labels.add(t.flag, { x: PX, y: 5.4, z: PZ }, { kind: 'tag', tone: 'blue' }).show(false),
-        bubble: app.labels.add(t.bubble, { x: benchAt.x, y: 1.5, z: benchAt.z }, { kind: 'bubble' }).show(false),
-      };
-      app.labels.add(t.band, { x: barOrigin.x + barRight.x * 4.6, y: 5.5, z: barOrigin.z + barRight.z * 4.6 }, { kind: 'plain' });
-      app.labels.add(t.bench, { x: benchAt.x + 1.6, y: 0.2, z: benchAt.z + 1.2 }, { kind: 'plain' });
-      citizens.hold(benchId, benchAt.x, 0.3, benchAt.z, gAz - 0.5);
-      warmth.focus(0, { x: G.x, y: 1, z: G.z }, 11, { dur: 1.4, delay: 0.8 });
-    },
-    exit() {
-      bandMat.color.copy(bandGray);
-      wrist.rotation.set(0, 0, 0);
-    },
-    update(dt) {
-      const t = SCENES[10].t;
-      // 100 Hz로 표본을 쌓는다
-      sampleClock += dt;
-      let last = samples[WINDOW - 1];
-      let pushed = 0;
-      while (sampleClock >= 1 / FS && pushed < 12) {
-        sampleClock -= 1 / FS;
-        sigT += 1 / FS;
-        samples.copyWithin(0, 1);
-        last = samples[WINDOW - 1] = MODES[mode](sigT, gaussian(Math.random));
-        pushed++;
-      }
-      if (sampleClock > 0.2) sampleClock = 0;
-      dftMagnitude(samples, mag);
-      const ratio = bandRatio(mag);
-      flagged = ratio > BAND_THRESHOLD;
-      // 손이 신호대로 떨린다
-      wrist.rotation.y = last * 0.3;
-      wrist.rotation.z = last * 0.09;
-      bandMat.color.copy(flagged ? C.blue : bandGray);
-      for (let k = 0; k < BINS; k++) {
-        const f = k * BIN_HZ;
-        const hgt = Math.max(0.04, mag[k] * 6.5);
-        bp.copy(barOrigin).addScaledVector(barRight, k * 0.235);
-        bm.compose(bp, bq, bs.set(1, hgt, 1));
-        bars.setMatrixAt(k, bm);
-        bars.setColorAt(k, flagged && f >= BAND[0] && f <= BAND[1] ? C.blue : barGray);
-      }
-      bars.instanceMatrix.needsUpdate = true;
-      bars.instanceColor.needsUpdate = true;
-      for (let i = 0; i < WAVE_N; i++) {
-        bp.copy(barOrigin).addScaledVector(barRight, (i / (WAVE_N - 1)) * 9.2);
-        wavePos[i * 3] = bp.x;
-        wavePos[i * 3 + 1] = 4.3 + samples[i * 2] * 0.55;
-        wavePos[i * 3 + 2] = bp.z;
-      }
-      waveGeo.attributes.position.needsUpdate = true;
-
-      gUI.head.set(flagged ? t.flagLine : '');
-      gUI.flag.show(flagged);
-      gUI.bubble.show(flagged || applied);
-      gUI.bubble.set(applied ? t.bubble2 : t.bubble).tone(applied ? 'amber' : '');
-    },
-  };
-
-  // ═══ 깨어남의 계단 ═════════════════════════════════
-  const ST = SITES.stairs;
-  const STEPS = 14;
-  const SW = 0.8;
-  const SH = 0.34;
-  const X0 = ST.x - 6.4;
-  const DEPTH = 4.4;
-  plate(group, { x: ST.x, z: ST.z, w: 20, d: 7.6 });
-  const stairGeo = mergeGeometries(
-    Array.from({ length: STEPS }, (_, k) => {
-      const g = new THREE.BoxGeometry(SW, (k + 1) * SH, DEPTH);
-      g.translate(X0 + SW / 2 + k * SW, ((k + 1) * SH) / 2, ST.z);
-      return g;
-    }),
-  );
-  group.add(prop(stairGeo, { h: 6 }));
-  const TOP_Y = STEPS * SH;
-  const landX = X0 + STEPS * SW;
-  put(box(3.4, TOP_Y, DEPTH, { h: 6 }), landX + 1.7, 0, ST.z);
-  const stepPos = (k, z) => ({ x: X0 + SW / 2 + k * SW, y: (k + 1) * SH, z });
-
-  const FROZEN_STEP = 6;
-  const frozenId = citizens.claim(1)[0];
-  const fz = stepPos(FROZEN_STEP, ST.z + 0.3);
-  citizens.setHome(frozenId, fz.x, fz.z, fz.y, Math.PI / 2);
-  const climberIds = citizens.claim(7);
-  const crand = rng(404);
-  const climbers = climberIds.map((id, k) => {
-    const z = ST.z - 1.7 + (k % 4) * 0.95 + crand() * 0.2;
-    const lane = Math.abs(z - fz.z) < 0.45 ? z + 0.8 : z;
-    citizens.setHome(id, X0 - 1.6 - k * 0.9, lane, 0, Math.PI / 2);
-    return { id, z: lane, step: -1, start: 1.5 + k * 2.3, sx: X0 - 1.6 - k * 0.9 };
+  // AI 예측 판(파랑)
+  const aiMat = new THREE.MeshBasicMaterial({ color: PALETTE.blue, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false });
+  const aiGeo = new THREE.PlaneGeometry(4.4, 2.3);
+  const aiPanel = new THREE.Mesh(aiGeo, aiMat);
+  aiPanel.position.set(benchAt.x, 4.8, benchAt.z);
+  aiPanel.rotation.y = gAz;
+  const aiEdgeMat = new THREE.LineBasicMaterial({ color: PALETTE.blue, transparent: true, opacity: 1 });
+  aiPanel.add(new THREE.LineSegments(new THREE.EdgesGeometry(aiGeo), aiEdgeMat));
+  // 판 안의 막대(예측 결과를 나타내는 그림)
+  const barMat = new THREE.MeshBasicMaterial({ color: PALETTE.blue, transparent: true, opacity: 0.9, depthWrite: false });
+  [0.9, 0.55, 0.3, 0.15].forEach((w, k) => {
+    const bar = new THREE.Mesh(new THREE.PlaneGeometry(3.2 * w, 0.18), barMat);
+    bar.position.set(-1.6 + (3.2 * w) / 2, 0.6 - k * 0.42, 0.01);
+    aiPanel.add(bar);
   });
+  aiPanel.visible = false;
+  group.add(aiPanel);
 
-  // 약의 분자 모형 (벤젠 고리 + 수산기 둘 + 아미노산 곁사슬)
-  const mol = new THREE.Group();
-  const MOL_HOME = v3(ST.x - 3.6, 7.4, ST.z + 0.6);
-  mol.position.copy(MOL_HOME);
-  group.add(mol);
-  const ringPts = [30, 90, 150, 210, 270, 330].map((d) => [Math.cos((d * Math.PI) / 180), Math.sin((d * Math.PI) / 180)]);
-  const atoms = [
-    ...ringPts.map((p) => ({ p, r: 0.2 })),
-    { p: [ringPts[3][0] * 2, ringPts[3][1] * 2], r: 0.26 }, // 6: OH
-    { p: [ringPts[4][0] * 2, ringPts[4][1] * 2], r: 0.26 }, // 7: OH
-    { p: [1.78, 0.9], r: 0.2 }, // 8: CH2
-    { p: [2.62, 0.38], r: 0.2 }, // 9: Cα
-    { p: [2.62, -0.62], r: 0.24 }, // 10: NH2
-    { p: [3.5, 0.88], r: 0.2 }, // 11: C
-    { p: [3.5, 1.86], r: 0.26 }, // 12: =O
-    { p: [4.36, 0.38], r: 0.26 }, // 13: OH
-  ];
-  const bonds = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [3, 6], [4, 7], [0, 8], [8, 9], [9, 10], [9, 11], [11, 12], [11, 13]];
-  const molProto = prop(new THREE.IcosahedronGeometry(1, 1), { h: 12, tint: C.amber, edges: false, glow: 0.35 });
-  const molMat = molProto.material;
-  const CX = 1.5;
-  const CY = 0.3;
-  const MS = 0.62;
-  for (const a of atoms) {
-    const m = new THREE.Mesh(molProto.geometry, molMat);
-    m.scale.setScalar(a.r * MS * 1.25);
-    m.position.set((a.p[0] - CX) * MS, (a.p[1] - CY) * MS, 0);
-    mol.add(m);
-  }
-  const up = v3(0, 1, 0);
-  for (const [i, j] of bonds) {
-    const a = v3((atoms[i].p[0] - CX) * MS, (atoms[i].p[1] - CY) * MS, 0);
-    const b = v3((atoms[j].p[0] - CX) * MS, (atoms[j].p[1] - CY) * MS, 0);
-    const len = a.distanceTo(b);
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, len, 6), molMat);
-    m.position.copy(a).add(b).multiplyScalar(0.5);
-    m.quaternion.setFromUnitVectors(up, b.sub(a).normalize());
-    mol.add(m);
-  }
-  const hitSphere = new THREE.Mesh(new THREE.SphereGeometry(1.9, 12, 8), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
-  mol.add(hitSphere);
-  const molHeat = molProto.heatU;
-  let given = false;
-  let givenT = 0;
-  let walkStep = FROZEN_STEP;
-  let sUI = null;
-  let burst = [];
+  const tmpA = v3(0, 0, 0);
+  const tmpB = v3(0, 0, 0);
+  const head = (id, out, y = 0.9) => citizens.at(id, out).setY(citizens.py[id] + y);
+  let cStep = 0;
+  let cSigned = false;
+  let cSignT = 0;
+  let cUI = null;
 
-  function resetStairs() {
-    given = false;
-    givenT = 0;
-    walkStep = FROZEN_STEP;
-    burst = [];
-    gsap.killTweensOf(mol.position);
-    gsap.killTweensOf(mol.scale);
-    gsap.killTweensOf(molHeat);
-    mol.position.copy(MOL_HOME);
-    mol.scale.setScalar(1);
-    mol.visible = true;
-    molHeat.value = 0.18;
-    citizens.clearOverride(frozenId);
-    citizens.teleport(frozenId, fz.x, fz.y, fz.z, Math.PI / 2);
-    citizens.hold(frozenId, fz.x, fz.y, fz.z, Math.PI / 2, 1.1);
-    citizens.tbow[frozenId] = 0.5;
-    climbers.forEach((c) => {
-      c.step = -1;
-      citizens.teleport(c.id, c.sx, 0, c.z, Math.PI / 2);
-      citizens.hold(c.id, c.sx, 0, c.z, Math.PI / 2, 1.5);
-    });
+  function cReset() {
+    app.tour.clearStage();
+    ui.clearControls();
+    care.enter();
   }
-  function give() {
-    if (given) return;
-    given = true;
-    givenT = 0;
-    const d = app.reduced ? 0.01 : 1.3;
-    gsap.to(mol.position, { x: fz.x, y: fz.y + 1.5, z: fz.z, duration: d, ease: 'power2.inOut' });
-    gsap.to(mol.scale, { x: 0.3, y: 0.3, z: 0.3, duration: d, ease: 'power2.in' });
-    gsap.to(molHeat, { value: 1.2, duration: d * 0.5 });
-    sUI.hint.show(false);
-    sUI.btn.textContent = SCENES[11].t.again;
+  function cSign() {
+    const t = SCENES[6].t;
+    cSigned = true;
+    cSignT = 0;
+    cUI.btn.textContent = t.reset;
+    ui.note(t.done, true, 'amber');
+    setTimeout(() => app.ui.panel.scrollTo({ top: app.ui.panel.scrollHeight, behavior: app.reduced ? 'auto' : 'smooth' }), 80);
+  }
+  function advance() {
+    const t = SCENES[6].t;
+    if (cSigned) return cReset();
+    if (cStep >= 3) return cSign();
+    cUI.rules[cStep].classList.remove('wait');
+    cStep++;
+    if (cStep === 1) {
+      // 기준 1: AI 예측은 참고일 뿐이다 → 파란 판이 흐려진다
+      gsap.to(aiMat, { opacity: 0.08, duration: app.reduced ? 0.01 : 0.9 });
+      gsap.to(barMat, { opacity: 0.25, duration: app.reduced ? 0.01 : 0.9 });
+      gsap.to(aiEdgeMat, { opacity: 0.3, duration: app.reduced ? 0.01 : 0.9 });
+      cUI.ai.set(`${t.ai}<br>${t.aiRef}`).tone('gray');
+    } else if (cStep === 2) {
+      // 기준 2: 의료진·가족·본인의 이야기를 함께 듣는다 → 주황 선이 이어진다
+      for (const id of [...others, patientId]) citizens.override(id, C.amber, 1);
+    } else if (cStep === 3) {
+      // 기준 3: 본인의 뜻을 먼저 존중하고, 돌봄은 끝까지 이어 간다
+      cUI.bubble.set(t.bubble).tone('amber').show(true);
+      cUI.care.show(true);
+      cUI.btn.textContent = t.sign;
+    }
+    setTimeout(() => app.ui.panel.scrollTo({ top: app.ui.panel.scrollHeight, behavior: app.reduced ? 'auto' : 'smooth' }), 80);
   }
 
-  const stairs = {
+  const care = {
     enter() {
-      const t = SCENES[11].t;
-      const btn = ui.button(t.give, () => (given ? (resetStairs(), (btn.textContent = t.give), sUI.hint.show(true), sUI.done.show(false)) : give()), { primary: true });
-      sUI = {
+      const t = SCENES[6].t;
+      cStep = 0;
+      cSigned = false;
+      cSignT = 0;
+      gsap.killTweensOf([aiMat, barMat, aiEdgeMat]);
+      aiMat.opacity = 0.32;
+      barMat.opacity = 0.9;
+      aiEdgeMat.opacity = 1;
+      aiPanel.visible = true;
+      ui.cards(t.cards.map((c) => ({ title: c.title, text: c.text })));
+      const btn = ui.button(t.next, advance, { primary: true });
+      const rules = ui.cards(t.rules.map((r, i) => ({ html: `<i>${i + 1}</i><span>${r}</span>`, cls: 'rule wait' })));
+      cUI = {
         btn,
-        hint: app.labels.add(t.hint, { x: MOL_HOME.x, y: MOL_HOME.y + 1.7, z: MOL_HOME.z }, { kind: 'tag', tone: 'amber' }),
-        done: app.labels.add(t.mol, { x: fz.x, y: fz.y + 1.6, z: fz.z }, { kind: 'tag', tone: 'amber' }).show(false),
+        rules,
+        ai: app.labels.add(t.ai, { x: benchAt.x, y: 6.4, z: benchAt.z }, { kind: 'tag', tone: 'blue' }),
+        bubble: app.labels.add(t.bubble, { x: benchAt.x, y: 1.9, z: benchAt.z }, { kind: 'bubble' }).show(false),
+        care: app.labels.add(t.care, { x: benchAt.x + fwd.x * 1.5, y: 0.3, z: benchAt.z + fwd.z * 1.5 }, { kind: 'tag', tone: 'amber' }).show(false),
       };
-      resetStairs();
-      this.t0 = 0;
-      warmth.focus(0, { x: ST.x, y: 3, z: ST.z }, 13.5, { dur: 1.5, delay: 0.8 });
+      app.labels.add(t.family, { x: (famAt[0].x + famAt[1].x) / 2, y: 1.6, z: (famAt[0].z + famAt[1].z) / 2 }, { kind: 'plain' });
+      app.labels.add(t.staff, { x: docAt.x, y: 1.6, z: docAt.z }, { kind: 'plain' });
+      for (const id of [...others, patientId]) {
+        citizens.hold(id, citizens.hx[id], citizens.hy[id], citizens.hz[id], citizens._hyaw?.[id]);
+      }
+      warmth.focus(0, { x: G.x, y: 1, z: G.z }, 10.5, { dur: 1.4, delay: 0.8 });
     },
     exit() {
-      resetStairs();
-      mol.visible = true;
-      document.body.style.cursor = '';
-    },
-    pointerMove(ray) {
-      document.body.style.cursor = !given && ray.intersectObject(hitSphere, false).length ? 'pointer' : '';
-    },
-    click(ray) {
-      if (!given && ray.intersectObject(hitSphere, false).length) give();
+      aiPanel.visible = false;
+      for (let k = 20; k < 24; k++) app.beams.hide(k);
     },
     update(dt, t, gt) {
-      if (!given) {
-        mol.position.y = MOL_HOME.y + Math.sin(gt * 1.3) * 0.22;
-        mol.rotation.y = Math.sin(gt * 0.6) * 0.45;
-        mol.rotation.z = Math.sin(gt * 0.4) * 0.08;
-        molHeat.value = 0.3 + 0.2 * Math.sin(gt * 2.4);
-      } else {
-        givenT += dt;
-        if (givenT > 1.3 && mol.visible) {
-          // 분자가 닿으면 시민이 색을 되찾고 다시 걷는다
-          mol.visible = false;
-          citizens.override(frozenId, C.amber, 1);
-          citizens.tbow[frozenId] = 0;
-          sUI.done.show(true);
-          const n = Math.round(70 * app.particleScale);
-          burst = Array.from({ length: n }, () => {
-            const a = Math.random() * Math.PI * 2;
-            const e = Math.random() * Math.PI - Math.PI / 2;
-            const sp = 1 + Math.random() * 2.5;
-            return { p: v3(fz.x, fz.y + 1.2, fz.z), v: v3(Math.cos(a) * Math.cos(e) * sp, Math.sin(e) * sp + 1, Math.sin(a) * Math.cos(e) * sp), life: 1 + Math.random() * 0.8 };
-          });
-        }
-        if (givenT > 1.9 && citizens.arrived(frozenId, 0.06)) {
-          if (walkStep < STEPS - 1) {
-            walkStep++;
-            const p = stepPos(walkStep, fz.z);
-            citizens.hold(frozenId, p.x, p.y, p.z, Math.PI / 2, 1.15);
-          } else if (walkStep === STEPS - 1) {
-            walkStep++;
-            citizens.hold(frozenId, landX + 1.4, TOP_Y, fz.z, -Math.PI / 2 + 0.6, 1.15);
-          }
-        }
-        sUI.done.pos.set(citizens.px[frozenId], citizens.py[frozenId] + 1.5, citizens.pz[frozenId]);
-      }
-      // 다른 시민들은 계단을 지나 오른다
-      for (const c of climbers) {
-        if (t < c.start || !citizens.arrived(c.id, 0.06)) continue;
-        if (c.step < STEPS - 1) {
-          c.step++;
-          const p = stepPos(c.step, c.z);
-          citizens.hold(c.id, p.x, p.y, p.z, Math.PI / 2, 1.5);
-        } else if (c.step === STEPS - 1) {
-          c.step++;
-          citizens.hold(c.id, landX + 0.7 + (c.id % 3) * 0.9, TOP_Y, c.z, Math.PI / 2, 1.5);
-        }
-      }
-      let n = 0;
-      for (const q of burst) {
-        q.life -= dt;
-        if (q.life <= 0) continue;
-        q.v.y -= 1.5 * dt;
-        q.p.addScaledVector(q.v, dt);
-        app.particles.set(n++, q.p.x, q.p.y, q.p.z, C.amber, 0.13 * clamp(q.life));
-      }
-      app.particles.commit(n);
+      if (cStep >= 2) {
+        head(patientId, tmpB, 0.62);
+        others.forEach((id, k) => {
+          head(id, tmpA, 0.9);
+          app.beams.set(20 + k, tmpA, tmpB, 0.035 * (0.85 + 0.15 * Math.sin(gt * 5 + k)), C.amber);
+        });
+      } else for (let k = 20; k < 23; k++) app.beams.hide(k);
+      if (cSigned) {
+        cSignT += dt;
+        const e = 1 - (1 - clamp((cSignT - 0.3) / 1.4)) ** 3;
+        tmpA.set(benchAt.x, 0.8, benchAt.z);
+        tmpB.set(benchAt.x, 0.8 + e * 85, benchAt.z);
+        if (e > 0) app.beams.set(23, tmpA, tmpB, 0.22 * (0.9 + 0.1 * Math.sin(gt * 7)), C.amber);
+      } else app.beams.hide(23);
     },
   };
 
-  return { 9: hospital, 10: garden, 11: stairs };
+  return { 5: hospital, 6: care };
 }

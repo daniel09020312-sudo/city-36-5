@@ -1,6 +1,6 @@
 // 원형 대지, 안개, 조명.
 import * as THREE from 'three';
-import { PALETTE } from '../config/palette.js';
+import { PALETTE } from '../palette.js';
 import { R_PLATFORM, DISTRICTS } from '../config/layout.js';
 import { lineMaterial } from './props.js';
 

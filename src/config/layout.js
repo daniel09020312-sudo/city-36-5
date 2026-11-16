@@ -7,10 +7,10 @@ export const GRID = 3.7; // 도시 블록 한 칸
 const P = (x, z) => ({ x, z });
 
 export const DISTRICTS = {
-  plaza: { key: 'plaza', c: P(0, 0), r: 11, first: 1 },
+  plaza: { key: 'plaza', c: P(0, 0), r: 11, first: 2 },
   recovery: { key: 'recovery', c: P(-38, -22), r: 22, first: 3 },
-  regulation: { key: 'regulation', c: P(38, -22), r: 22, first: 6 },
-  dignity: { key: 'dignity', c: P(0, 44), r: 22, first: 9 },
+  regulation: { key: 'regulation', c: P(38, -22), r: 22, first: 4 },
+  dignity: { key: 'dignity', c: P(0, 44), r: 22, first: 5 },
 };
 
 export const SITES = {
@@ -19,16 +19,11 @@ export const SITES = {
   entranceTarget: P(9, -30), // 비난이 몰리는 건물
   fraction: P(-50, -30), // 분할 조사탑
   screening: P(-33, -31), // 선별 광장
-  bridgeA: P(-48, -12), // 재검의 다리 시작
-  bridgeB: P(-38, -12), // 재검의 다리 끝
-  court: P(-28.5, -12), // 부활 경기장
   alert: P(26, -28), // 흥분독성 경보탑
   forest: P(40, -28), // 별아교 숲
-  street: P(38, -13), // 고개 드는 거리
   boards: P(53, -3), // 워터마크 전광판
   hospital: P(-12, 42), // 숨결 병원
   garden: P(10, 41), // 진전 정원
-  stairs: P(0, 57), // 깨어남의 계단
 };
 
 // 일반 건물을 세우지 않는 구역. soft는 시민이 서 있어도 되는 곳(광장, 대로).
@@ -41,14 +36,11 @@ export const RESERVED = [
   { t: 'rect', x0: -17, x1: 13, z0: -37, z1: -23 }, // 과열의 입구
   { t: 'circle', x: S.fraction.x, z: S.fraction.z, r: 8 },
   { t: 'rect', x0: -45, x1: -21, z0: -39.5, z1: -22.5 }, // 선별 광장
-  { t: 'rect', x0: -54, x1: -21, z0: -18.5, z1: -5.5 }, // 다리 + 경기장
   { t: 'circle', x: S.alert.x, z: S.alert.z, r: 3.4 },
   { t: 'circle', x: S.forest.x, z: S.forest.z, r: 11 },
-  { t: 'rect', x0: 28, x1: 48, z0: -17.5, z1: -8.5 }, // 고개 드는 거리
   { t: 'circle', x: S.boards.x, z: S.boards.z, r: 9 },
   { t: 'circle', x: S.hospital.x, z: S.hospital.z, r: 7.5 },
   { t: 'circle', x: S.garden.x, z: S.garden.z, r: 8.5 },
-  { t: 'rect', x0: -11, x1: 11, z0: 51.5, z1: 62.5 }, // 깨어남의 계단
 ];
 
 function inZone(zn, x, z, m) {

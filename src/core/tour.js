@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { SCENES, DISTRICT_NAMES } from '../content/scenes.js';
+import { SCENES, DISTRICT_NAMES } from '../scenes.js';
 import { DISTRICTS, districtAt } from '../config/layout.js';
 import { warmth } from './warmth.js';
 
@@ -62,7 +62,7 @@ export class Tour {
       down = null;
       if (moved > 7 || !quick) return;
       if (this.mode === 'tour') this.current?.click?.(this.ray(e), e);
-      else this.freeClick(this.ray(e));
+      else if (this.mode === 'free') this.freeClick(this.ray(e));
     });
     dom.addEventListener('pointerleave', () => this.current?.pointerLeave?.());
 
@@ -91,11 +91,38 @@ export class Tour {
     return _ray;
   }
 
+  // 주소 끝의 #1~#8 로 장면을 연다. 예전 주소(#s0~#s13)는 가까운 장면으로 이어 준다.
   readHash() {
-    const m = /^#s(\d+)$/.exec(location.hash);
-    if (!m) return null;
-    const i = Number(m[1]);
-    return i >= 0 && i < SCENES.length ? i : null;
+    let m = /^#(\d+)$/.exec(location.hash);
+    if (m) {
+      const n = Number(m[1]);
+      return n >= 1 && n <= SCENES.length ? n - 1 : null;
+    }
+    m = /^#s(\d+)$/.exec(location.hash);
+    if (m) return Math.min(SCENES.length - 1, Number(m[1]));
+    return null;
+  }
+
+  // 앞 장면이 남긴 것을 한꺼번에 치운다 (장면이 바뀔 때, 부분이 바뀔 때)
+  clearStage() {
+    const { app } = this;
+    app.labels.clear();
+    app.particles.clear();
+    app.beams.clear();
+    warmth.clearAll();
+    app.citizens.releaseAll();
+    app.citizens.clearOverrides();
+    app.citizens.clearMarks();
+    app.citizens.suppress(false);
+  }
+
+  // 같은 장면 안에서 카메라만 옮긴다 (부분 탭)
+  flyTo(cam, dur = 2) {
+    const { app } = this;
+    this.tl?.kill();
+    const inset = app.ui.inset();
+    const to = { ...this.camTarget(null, cam), ox: inset.x, oy: inset.y };
+    this.tl = gsap.timeline().to(this.rig, { ...to, duration: app.reduced ? 0.001 : dur, ease: 'power2.inOut' });
   }
 
   start() {
@@ -112,6 +139,10 @@ export class Tour {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const tag = e.target?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return; // 슬라이더를 화살표로 움직일 때는 넘기지 않는다
+    if (this.mode === 'walk') {
+      if (e.key === 'Escape') this.setMode('tour');
+      return;
+    }
     if (e.key === 'ArrowRight' || e.key === 'PageDown') this.modeTour(() => this.next());
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') this.modeTour(() => this.prev());
     else if (e.key === 'Home') this.modeTour(() => this.go(0));
@@ -152,19 +183,12 @@ export class Tour {
 
     if (!same) {
       this.current?.exit?.();
-      // 앞 장면이 남긴 것을 한꺼번에 치운다
-      app.labels.clear();
-      app.particles.clear();
-      app.beams.clear();
-      warmth.clearAll();
-      app.citizens.releaseAll();
-      app.citizens.clearOverrides();
-      app.citizens.clearMarks();
-      app.citizens.suppress(false);
+      this.clearStage();
+      app.ui.setPanelHidden(false);
       this.index = i;
       app.citizens.setProgress(sc.warm ?? 0);
       app.ui.setScene(i, sc);
-      if (location.hash !== `#s${i}`) history.replaceState(null, '', `#s${i}`);
+      if (location.hash !== `#${i + 1}`) history.replaceState(null, '', `#${i + 1}`);
     }
 
     const cut = instant || app.reduced;
@@ -188,9 +212,30 @@ export class Tour {
   setMode(mode, retarget = true) {
     if (mode === this.mode) return;
     const { app } = this;
+    const prev = this.mode;
+    if (prev === 'walk') {
+      // 걷던 자리 앞쪽을 바라보는 점으로 카메라 상태를 옮겨, 그 자리에서 부드럽게 빠져나온다
+      app.walk.stop();
+      const f = app.walk.forward(_off);
+      const p = app.camera.position;
+      const tx = p.x + f.x * 10;
+      const ty = p.y + f.y * 10;
+      const tz = p.z + f.z * 10;
+      this.controls.target.set(tx, ty, tz);
+      Object.assign(this.rig, { tx, ty, tz, dist: 10 / this.frameFactor(), el: Math.asin(-f.y) / D2R, az: Math.atan2(-f.x, -f.z) / D2R, ox: 0, oy: 0 });
+    }
     this.mode = mode;
     app.ui.setMode(mode);
-    this.districtLabels.forEach((l) => l.show(mode === 'free'));
+    this.districtLabels.forEach((l) => l.show(mode === 'free' || mode === 'walk'));
+    if (mode === 'walk') {
+      this.tl?.kill();
+      this.controls.enabled = false;
+      app.ui.showEnding(false);
+      app.ui.showIntro(false);
+      app.hudWasOn = true;
+      app.walk.start();
+      return;
+    }
     if (mode === 'free') {
       this.tl?.kill();
       app.ui.showEnding(false);
@@ -199,6 +244,11 @@ export class Tour {
       gsap.to(this.rig, { ox: 0, oy: 0, fog: Math.min(this.rig.fog, 0.0042), duration: 0.9, ease: 'power2.out' });
     } else {
       this.controls.enabled = false;
+      if (prev === 'walk') {
+        if (retarget) this.go(this.index, { force: true });
+        if (this.index === 0 && app.introGo) app.ui.showIntro(true);
+        return;
+      }
       // 지금 카메라 위치에서 장면의 자리로 돌아간다
       const { camera } = app;
       const k = this.frameFactor();
@@ -241,6 +291,13 @@ export class Tour {
   }
 
   update(dt, t) {
+    if (this.mode === 'walk') {
+      this.app.scene.fog.density = 0.02;
+      this.app.walk.update(dt, t);
+      this.sceneTime = (this.sceneTime ?? 0) + dt;
+      this.current?.update?.(dt, this.sceneTime, t);
+      return;
+    }
     const { app, rig } = this;
     const { camera, scene } = app;
     const k = this.frameFactor();

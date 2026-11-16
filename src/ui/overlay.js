@@ -1,5 +1,5 @@
 // HTML 오버레이: 설명 패널, 슬라이더·토글·카드 같은 조작부, 이동 버튼.
-import { SCENES, SITE } from '../content/scenes.js';
+import { SCENES, SITE } from '../scenes.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, html) => {
@@ -22,6 +22,7 @@ export class UI {
     $('brand-sub').textContent = SITE.project;
     document.querySelector('#mode [data-mode=tour]').textContent = SITE.tour;
     document.querySelector('#mode [data-mode=free]').textContent = SITE.free;
+    document.querySelector('#mode [data-mode=walk]').textContent = SITE.walk;
     $('prev').textContent = SITE.prev;
     $('next').textContent = SITE.next;
     $('free-hint').textContent = SITE.freeHint;
@@ -31,11 +32,14 @@ export class UI {
     this.intro.querySelector('.intro-hint').textContent = SITE.hint;
 
     const end = SCENES[SCENES.length - 1];
-    this.ending.querySelector('.ending-rule').textContent = end.t.rule;
+    this.ending.querySelector('.ending-rule').textContent = end.t.end.rule;
     this.ending.querySelector('.ending-quote').innerHTML = end.quote;
-    this.ending.querySelector('.ending-practice').innerHTML = end.t.practice.map((p) => `<span>${p}</span>`).join('');
-    $('restart').textContent = end.t.restart;
-    $('explore').textContent = end.t.explore;
+    this.ending.querySelector('.ending-practice').innerHTML =
+      `<b>${end.t.end.practiceTitle}</b>` + end.t.end.practice.map((p) => `<span>${p}</span>`).join('');
+    $('back').textContent = end.t.end.back;
+    $('restart').textContent = end.t.end.restart;
+    $('explore').textContent = end.t.end.explore;
+    $('back').addEventListener('click', () => this.onPartBack?.());
 
     // 위쪽 진행 표시: 장면마다 한 칸
     const prog = $('progress');
@@ -78,16 +82,7 @@ export class UI {
     ex.style.display = sc.example ? '' : 'none';
     ex.querySelector('span').textContent = SITE.example;
     ex.querySelector('p').textContent = sc.example || '';
-    const art = $('article');
-    art.style.display = sc.article ? '' : 'none';
-    if (sc.article) {
-      art.href = sc.article.url;
-      art.querySelector('.a-k').textContent = SITE.article;
-      art.querySelector('b').textContent = sc.article.title;
-      art.querySelector('i').textContent = `${sc.article.outlet} · ${sc.article.date}`;
-      art.querySelector('p').textContent = sc.article.note;
-      art.querySelector('em').textContent = `${SITE.articleOpen} ↗`;
-    }
+    this.setArticle(sc.article);
     const mean = $('meaning');
     mean.style.display = sc.meaning ? '' : 'none';
     mean.querySelector('span').textContent = SITE.meaning;
@@ -115,17 +110,55 @@ export class UI {
   }
 
   refreshPanel() {
-    const hide = !this.scene || this.scene.panel === false || document.body.dataset.mode === 'free';
+    const mode = document.body.dataset.mode;
+    const hide = !this.scene || this.scene.panel === false || this.partHidden || mode === 'free' || mode === 'walk';
     this.panel.classList.toggle('hidden', hide);
   }
 
   // 패널이 화면을 가리는 만큼(px). 카메라가 그만큼 장면을 비켜 잡는다.
   inset() {
     // 엔딩은 글이 위쪽에 놓이므로 도시를 아래로 내려 잡는다
-    if (this.scene?.id === 'ending' && document.body.dataset.mode !== 'free') return { x: 0, y: -window.innerHeight * (window.innerWidth <= 760 ? 0.2 : 0.1) };
+    if (this.partHidden && document.body.dataset.mode === 'tour') return { x: 0, y: -window.innerHeight * (window.innerWidth <= 760 ? 0.2 : 0.1) };
     if (this.panel.classList.contains('hidden')) return { x: 0, y: 0 };
     if (window.innerWidth <= 760) return { x: 0, y: Math.min(this.panel.offsetHeight, window.innerHeight * 0.47) * 0.5 };
     return { x: (this.panel.offsetWidth + 28) * 0.5, y: 0 };
+  }
+
+  setPanelHidden(v) {
+    this.partHidden = !!v;
+    this.refreshPanel();
+  }
+
+  setArticle(art) {
+    const a = $('article');
+    a.style.display = art ? '' : 'none';
+    if (!art) return;
+    a.href = art.url;
+    a.querySelector('.a-k').textContent = SITE.article;
+    a.querySelector('b').textContent = art.title;
+    a.querySelector('i').textContent = `${art.outlet} · ${art.date}`;
+    a.querySelector('p').textContent = art.note;
+    a.querySelector('em').textContent = `${SITE.articleOpen} ↗`;
+  }
+
+  clearControls() {
+    this.controls.innerHTML = '';
+  }
+
+  // 조작이 둘인 장면의 부분 탭 + 그 부분의 안내 글
+  partTabs(parts, active, onPick) {
+    const wrap = el('div', 'tabs');
+    const btns = parts.map((p, i) => {
+      const b = el('button', `tab${i === active ? ' on' : ''}`, p.label);
+      b.type = 'button';
+      b.addEventListener('click', () => onPick(i));
+      wrap.appendChild(b);
+      return b;
+    });
+    this.add(wrap);
+    if (parts[active]?.note) this.add(el('p', 'note part-note', parts[active].note));
+    this.setArticle(parts[active]?.article ?? this.scene?.article);
+    return { btns };
   }
 
   showIntro(v) {
