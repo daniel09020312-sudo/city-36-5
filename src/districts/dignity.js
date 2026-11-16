@@ -393,7 +393,7 @@ export function createDignity(app) {
     return { id, z: lane, step: -1, start: 1.5 + k * 2.3, sx: X0 - 1.6 - k * 0.9 };
   });
 
-  // 레보도파 분자 모형 (벤젠 고리 + 수산기 둘 + 아미노산 곁사슬)
+  // 약의 분자 모형 (벤젠 고리 + 수산기 둘 + 아미노산 곁사슬)
   const mol = new THREE.Group();
   const MOL_HOME = v3(ST.x - 3.6, 7.4, ST.z + 0.6);
   mol.position.copy(MOL_HOME);
