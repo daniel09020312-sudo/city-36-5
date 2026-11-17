@@ -22,7 +22,7 @@ void main() {
 }`;
 
 const VignetteShader = {
-  uniforms: { tDiffuse: { value: null }, uAmount: { value: 0.3 } },
+  uniforms: { tDiffuse: { value: null }, uAmount: { value: 0.16 } },
   vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse; uniform float uAmount; varying vec2 vUv;
@@ -44,9 +44,9 @@ export function createPostFX(renderer, scene, camera) {
   const composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
 
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.5, 0.5, 0.14);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.5, 0.5, 0.36);
   bloom.materialHighPassFilter.fragmentShader = CHROMA_HIGHPASS;
-  bloom.materialHighPassFilter.uniforms.smoothWidth.value = 0.22;
+  bloom.materialHighPassFilter.uniforms.smoothWidth.value = 0.12;
   bloom.materialHighPassFilter.needsUpdate = true;
   composer.addPass(bloom);
 

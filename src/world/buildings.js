@@ -193,6 +193,19 @@ const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _col = new THREE.Color();
 
+// 건물 외벽 색: 모양과 자리에 따라 고른다 (같은 자리는 늘 같은 색)
+function facade(b, out) {
+  const t = Math.sin(b.x * 12.9898 + b.z * 78.233) * 43758.5453;
+  const r = t - Math.floor(t);
+  const F = PALETTE.facades;
+  let list;
+  if (b.shape === 'office' || b.shape === 'slab' || b.shape === 'round') list = r < 0.82 ? F.glass : F.concrete;
+  else if (b.shape === 'apt' || b.shape === 'aptTower') list = F.apt;
+  else if (b.h < 5) list = r < 0.55 ? F.warm : F.concrete;
+  else list = r < 0.35 ? F.warm : r < 0.6 ? F.glass : F.concrete;
+  return out.set(list[Math.floor(r * 997) % list.length]);
+}
+
 // 일반 건물의 회색: 낮을수록 어둡고, 고층일수록 밝다 (#2B2B30 → #7C7C84)
 function grayTall(h, out) {
   const t = Math.min(1, Math.max(0, (h - 1.5) / 34));
@@ -254,7 +267,7 @@ export class Buildings {
     set.mesh.count = set.count;
     set.edges.geometry.instanceCount = set.count;
     if (b.gray !== null) _col.set(b.gray);
-    else grayForHeight(b.h, _col);
+    else facade(b, _col);
     set.mesh.setColorAt(b.i, _col);
     set.mesh.instanceColor.needsUpdate = true;
     this.list.push(b);
@@ -392,7 +405,7 @@ export class Buildings {
       if (!ok || spots.length < 2) continue;
       for (const sp of spots) {
         const h = Math.min(baseH + (rand() - 0.5) * 1.5, ceiling(sp.x, sp.z));
-        this.add({ x: sp.x, z: sp.z, w: len, d: 1.55, h, rot, shape: 'apt', filler: true, gray: grayTall(h + 6, _col).getHex() });
+        this.add({ x: sp.x, z: sp.z, w: len, d: 1.55, h, rot, shape: 'apt', filler: true });
         for (const o of [-0.33, 0, 0.33]) mark(sp.x + ux * len * o, sp.z + uz * len * o, 1.45);
       }
     }
@@ -443,7 +456,7 @@ export class Buildings {
       if (h > 15) towers.push(b);
       // 고층 발치의 저층부(상가·로비)
       if (h > 15 && pod < 0.6 && shape !== 'aptTower') {
-        this.add({ x, z, w: w * 1.25, d: d * 1.25, h: 0.9 + pod * 2.2, rot, filler: true, shadow: false, gray: grayTall(3, _col).getHex() });
+        this.add({ x, z, w: w * 1.25, d: d * 1.25, h: 0.9 + pod * 2.2, rot, filler: true, shadow: false, gray: PALETTE.facades.concrete[1] });
       }
     };
     for (let i = 0; i < 40000; i++) tryPlace(false);

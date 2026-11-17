@@ -86,7 +86,7 @@ const FRAG_BODY = /* glsl */ `
     wK = max(wK, m * max(vHeat, uSlotHeat[i]));
   }
   vec3 warm = vTint * (0.55 + 0.6 * wGray + uGlow) * (1.0 + max(wK - 1.0, 0.0));
-  gl_FragColor.rgb = mix(vec3(wGray), warm, clamp(wK, 0.0, 1.0));
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, warm, clamp(wK, 0.0, 1.0));
 }
 `;
 

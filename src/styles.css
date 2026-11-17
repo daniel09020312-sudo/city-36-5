@@ -1555,3 +1555,14 @@ body[data-mode='walk'] #hud {
   pointer-events: none;
   z-index: 6;
 }
+
+/* 밝은 낮 하늘 위의 글자 */
+#intro {
+  background: linear-gradient(to top, rgba(12, 12, 14, 0.82), rgba(12, 12, 14, 0.45) 38%, rgba(12, 12, 14, 0) 62%);
+}
+#hud .temp {
+  text-shadow: 0 2px 24px rgba(12, 12, 14, 0.55), 0 0 40px color-mix(in srgb, var(--tone) 45%, transparent);
+}
+#hud .state {
+  text-shadow: 0 1px 10px rgba(12, 12, 14, 0.7);
+}

@@ -66,7 +66,7 @@ function boot() {
   const pixelRatio = () => Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 2);
   renderer.setPixelRatio(pixelRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setClearColor(PALETTE.sky);
+  renderer.setClearColor(PALETTE.skyHorizon);
   renderer.toneMapping = THREE.NoToneMapping; // 팔레트 색이 그대로 화면에 나오게
 
   const scene = new THREE.Scene();

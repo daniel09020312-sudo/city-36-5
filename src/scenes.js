@@ -65,8 +65,8 @@ export const SCENES = [
     panel: false,
     tone: 'amber',
     warm: 0,
-    fog: 0.0034,
-    cam: { target: [0, 3, 0], dist: 196, el: 0.6, az: 0 },
+    fog: 0.0019,
+    cam: { target: [0, 9, 0], dist: 225, el: 8, az: 0 },
   },
 
   // 2. 문제
@@ -131,7 +131,7 @@ export const SCENES = [
       ],
     },
     warm: 0.03,
-    fog: 0.003,
+    fog: 0.0024,
     sight: 12.5,
     cam: { target: [0, 5, 0], dist: 178, el: 36, az: 0 },
     cam2: { az: 14, dur: 30 },
@@ -425,7 +425,7 @@ export const SCENES = [
       },
     },
     warm: 0.3,
-    fog: 0.003,
+    fog: 0.0022,
     cam: LIMITS_CAM,
     cam2: { az: 38, dur: 40 },
   },

@@ -78,6 +78,10 @@ export function createDignity(app) {
   const holo = new THREE.Mesh(new THREE.PlaneGeometry(6, 3.6), holoMat);
   holo.position.set(H.x - 0.4, 11.6, H.z);
   holo.rotation.y = hAz;
+  const holoBack = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 3.8), new THREE.MeshBasicMaterial({ color: '#16202B', transparent: true, opacity: 0.82, depthWrite: false }));
+  holoBack.position.z = -0.03;
+  holoBack.renderOrder = -1;
+  holo.add(holoBack);
   holo.visible = false;
   group.add(holo);
   const staffIds = citizens.claim(6);

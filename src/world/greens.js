@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { rng } from '../core/rng.js';
+import { PALETTE } from '../palette.js';
 import { DISTRICTS, R_CITY, isFree, isWalkable } from '../config/layout.js';
 import { lineMaterial } from './props.js';
 
@@ -43,11 +44,11 @@ export function createGreens(app, parks) {
   const geos = [mergeGeometries([prep(trunk(0.4)), prep(roundCrown)]), mergeGeometries([prep(trunk(0.3)), prep(coneCrown)])];
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0, flatShading: true });
   const spots = [[], []];
-  const plant = (x, z, s = 1, kind = rand() > 0.72 ? 1 : 0) => spots[kind].push({ x, z, s: s * (0.8 + rand() * 0.55), g: 0.075 + rand() * 0.06, rot: rand() * 6 });
+  const plant = (x, z, s = 1, kind = rand() > 0.72 ? 1 : 0) => spots[kind].push({ x, z, s: s * (0.8 + rand() * 0.55), g: rand(), rot: rand() * 6 });
 
   // ── 공원: 바닥, 산책로, 연못, 빽빽한 나무 ───────────
-  const lawn = new THREE.MeshBasicMaterial({ color: '#1d1e21' });
-  const water = new THREE.MeshBasicMaterial({ color: '#0b0b0d' });
+  const lawn = new THREE.MeshStandardMaterial({ color: PALETTE.lawn, roughness: 1, flatShading: true });
+  const water = new THREE.MeshStandardMaterial({ color: PALETTE.water, roughness: 0.35, metalness: 0.1 });
   for (const pk of parks) {
     const base = new THREE.Mesh(new THREE.CircleGeometry(pk.r, 40).rotateX(-Math.PI / 2), lawn);
     base.position.set(pk.x, 0.02, pk.z);
@@ -132,7 +133,7 @@ export function createGreens(app, parks) {
     list.forEach((t, i) => {
       m4.compose(p.set(t.x, 0, t.z), q.setFromEuler(e.set(0, t.rot, 0)), s.set(t.s, t.s * (kind ? 1.2 : 1), t.s));
       mesh.setMatrixAt(i, m4);
-      mesh.setColorAt(i, col.setScalar(t.g));
+      mesh.setColorAt(i, col.set(PALETTE.trees[Math.floor(t.g * PALETTE.trees.length)]));
     });
     group.add(mesh);
   });
@@ -142,8 +143,8 @@ export function createGreens(app, parks) {
     const len = Math.hypot(c.x, c.z);
     return { ux: c.x / len, uz: c.z / len, s0: RING_R + 1.2, s1: len - 6.5, rot: Math.atan2(-c.z, c.x) };
   });
-  const asphalt = new THREE.MeshBasicMaterial({ color: '#131315' });
-  const paint = new THREE.MeshBasicMaterial({ color: '#8d8d95' });
+  const asphalt = new THREE.MeshStandardMaterial({ color: PALETTE.road, roughness: 1 });
+  const paint = new THREE.MeshBasicMaterial({ color: PALETTE.roadPaint });
   const flat = (w, d) => new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2);
   for (const rd of roads) {
     const L = rd.s1 - rd.s0;
@@ -193,7 +194,7 @@ export function createGreens(app, parks) {
   const carMesh = new THREE.InstancedMesh(carGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, metalness: 0, flatShading: true }), cars.length);
   carMesh.frustumCulled = false;
   carMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  cars.forEach((c, i) => carMesh.setColorAt(i, col.setScalar(c.g)));
+  cars.forEach((c, i) => carMesh.setColorAt(i, col.set(PALETTE.cars[Math.floor(c.g * 997) % PALETTE.cars.length])));
   group.add(carMesh);
   const LANE = 0.82;
   const updateCars = (dt) => {

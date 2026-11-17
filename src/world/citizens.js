@@ -7,7 +7,8 @@ import { C, PALETTE } from '../palette.js';
 import { GRID, R_CITY, isWalkable } from '../config/layout.js';
 import { rng, damp } from '../core/rng.js';
 
-const HEAD_Y = 0.92; // 머리 위 표시가 뜨는 높이(시민 키 1 기준)
+const HEAD_Y = 0.92;
+const _cloth = new THREE.Color(); // 머리 위 표시가 뜨는 높이(시민 키 1 기준)
 const _m = new THREE.Matrix4();
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 
@@ -21,7 +22,7 @@ export class Citizens {
     head.translate(0, 0.57, 0);
     const geo = mergeGeometries([body, head]);
 
-    this.mesh = new THREE.InstancedMesh(geo, makeWarmMaterial({ instanced: true, color: PALETTE.citizen, bow: true, glow: 0.3 }), N);
+    this.mesh = new THREE.InstancedMesh(geo, makeWarmMaterial({ instanced: true, color: 0xffffff, bow: true, glow: 0.3 }), N);
     this.mesh.frustumCulled = false;
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const attr = (size) => {
@@ -83,6 +84,7 @@ export class Citizens {
       this.wr[i] = 0.25 + rand() * 0.7;
       this.rank[i] = rand();
       this.setTint(i, C.amber);
+      this.mesh.setColorAt(i, _cloth.set(PALETTE.clothes[Math.floor(rand() * PALETTE.clothes.length)]));
     }
 
     // 머리 위 표시: 레드 점(의혹) + 앰버 테두리(실제 양성)
