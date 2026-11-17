@@ -163,7 +163,7 @@ class ShapeSet {
   constructor(scene, geo, cap) {
     this.cap = cap;
     this.count = 0;
-    this.mesh = new THREE.InstancedMesh(geo, makeWarmMaterial({ instanced: true }), cap);
+    this.mesh = new THREE.InstancedMesh(geo, makeWarmMaterial({ instanced: true, windows: true }), cap);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

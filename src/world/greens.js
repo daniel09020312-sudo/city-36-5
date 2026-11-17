@@ -41,8 +41,10 @@ export function createGreens(app, parks) {
   const coneCrown = new THREE.ConeGeometry(0.26, 0.82, 6);
   coneCrown.translate(0, 0.62, 0);
   const prep = (g) => (g.index ? g.toNonIndexed() : g);
-  const geos = [mergeGeometries([prep(trunk(0.4)), prep(roundCrown)]), mergeGeometries([prep(trunk(0.3)), prep(coneCrown)])];
+  const trunkGeos = [trunk(0.4), trunk(0.3)];
+  const crownGeos = [prep(roundCrown), prep(coneCrown)];
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0, flatShading: true });
+  const trunkMat = new THREE.MeshStandardMaterial({ color: PALETTE.trunk, roughness: 1, metalness: 0, flatShading: true });
   const spots = [[], []];
   const plant = (x, z, s = 1, kind = rand() > 0.72 ? 1 : 0) => spots[kind].push({ x, z, s: s * (0.8 + rand() * 0.55), g: rand(), rot: rand() * 6 });
 
@@ -128,14 +130,16 @@ export function createGreens(app, parks) {
   const col = new THREE.Color();
   spots.forEach((list, kind) => {
     if (!list.length) return;
-    const mesh = new THREE.InstancedMesh(geos[kind], mat, list.length);
-    mesh.frustumCulled = false;
+    const mesh = new THREE.InstancedMesh(crownGeos[kind], mat, list.length);
+    const trunks = new THREE.InstancedMesh(trunkGeos[kind], trunkMat, list.length);
+    mesh.frustumCulled = trunks.frustumCulled = false;
     list.forEach((t, i) => {
       m4.compose(p.set(t.x, 0, t.z), q.setFromEuler(e.set(0, t.rot, 0)), s.set(t.s, t.s * (kind ? 1.2 : 1), t.s));
       mesh.setMatrixAt(i, m4);
+      trunks.setMatrixAt(i, m4);
       mesh.setColorAt(i, col.set(PALETTE.trees[Math.floor(t.g * PALETTE.trees.length)]));
     });
-    group.add(mesh);
+    group.add(mesh, trunks);
   });
   // ── 도로: 아스팔트, 중앙선, 횡단보도, 자동차 ─────────
   const roads = AVENUES.map((key) => {

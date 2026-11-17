@@ -1,4 +1,4 @@
-// 땅과 하늘, 빛, 그리고 도시 둘레의 풍경(교외 주택, 숲, 들판, 강과 다리, 바깥으로 이어지는 길, 언덕과 산).
+// 땅과 하늘, 빛, 그리고 도시를 둘러싼 산(분지). 한쪽만 골짜기로 열려 있다.
 // 도시는 공중에 떠 있지 않고, 지평선까지 이어지는 땅 위에 놓인다.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -9,9 +9,6 @@ import { rng } from '../core/rng.js';
 
 const AVENUES = ['recovery', 'regulation', 'dignity'];
 const SUN_DIR = new THREE.Vector3(0.55, 0.6, 0.42).normalize();
-const RING_IN = 104; // 바깥 순환도로
-const RING_OUT = 110;
-const riverZ = (x) => -165 + 38 * Math.sin(x / 130) + 14 * Math.sin(x / 47 + 1.3); // 도시 남쪽을 흐르는 강
 
 const std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
 
@@ -94,148 +91,127 @@ function createLandscape(scene) {
   const roadMat = std(PALETTE.road, { polygonOffset: true, polygonOffsetFactor: -2 });
   const flat = (w, d) => new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2);
 
-  // 바깥으로 이어지는 큰길 세 개
+  // 도시는 산으로 둘러싸인 분지에 있다. 카메라가 도시를 바라보는 쪽(+z, 존엄 구역 대로 방향)만
+  // 골짜기로 열어 두어, 첫 화면과 마지막 장면에서 산을 배경으로 도시가 보이게 한다.
+  const OPEN_FROM = -32; // 열어 둘 방향(도, +z 기준 시계 반대쪽이 +)
+  const OPEN_TO = 26;
+  const bearing = (x, z) => (Math.atan2(x, z) * 180) / Math.PI;
+  const inValley = (x, z, r) => {
+    const b = bearing(x, z);
+    return r < 340 && b > OPEN_FROM && b < OPEN_TO;
+  };
+
+  // 큰길: 골짜기로 나가는 길은 멀리까지, 나머지 둘은 산자락에서 끝난다
   const avenues = AVENUES.map((key) => {
     const c = DISTRICTS[key].c;
     const len = Math.hypot(c.x, c.z);
-    return { ux: c.x / len, uz: c.z / len, rot: Math.atan2(-c.z, c.x) };
+    return { key, ux: c.x / len, uz: c.z / len, rot: Math.atan2(-c.z, c.x) };
   });
   const S0 = R_PLATFORM - 1;
-  const S1 = 1000;
   for (const a of avenues) {
+    const S1 = a.key === 'dignity' ? 900 : 118;
     const m = new THREE.Mesh(flat(S1 - S0, 5), roadMat);
-    m.position.set(a.ux * (S0 + S1) / 2, -0.12, a.uz * (S0 + S1) / 2);
+    m.position.set((a.ux * (S0 + S1)) / 2, -0.12, (a.uz * (S0 + S1)) / 2);
     m.rotation.y = a.rot;
     land.add(m);
   }
-  // 순환도로
-  const ringRoad = new THREE.Mesh(new THREE.RingGeometry(RING_IN, RING_OUT, 160).rotateX(-Math.PI / 2), roadMat);
-  ringRoad.position.y = -0.12;
-  land.add(ringRoad);
-
   const nearAvenue = (x, z, pad) =>
     avenues.some((a) => {
       const along = x * a.ux + z * a.uz;
       return along > S0 - 4 && Math.abs(x * a.uz - z * a.ux) < pad;
     });
-  const nearRing = (x, z, pad) => {
-    const r = Math.hypot(x, z);
-    return r > RING_IN - pad && r < RING_OUT + pad;
-  };
-  const nearRiver = (x, z, pad) => Math.abs(z - riverZ(x)) < 9 + pad;
-  const free = (x, z, pad) => !nearAvenue(x, z, pad + 2.5) && !nearRing(x, z, pad) && !nearRiver(x, z, pad);
 
-  // 강: 도시 남쪽을 동서로 흐른다
-  const N = 260;
-  const pos = new Float32Array(N * 2 * 3);
-  const idx = [];
-  for (let i = 0; i < N; i++) {
-    const x = -1100 + (2200 * i) / (N - 1);
-    const z = riverZ(x);
-    const w = 9 + 2.5 * Math.sin(x / 70);
-    pos.set([x, -0.14, z - w, x, -0.14, z + w], i * 6);
-    if (i < N - 1) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+  // ── 산 한 채: 울퉁불퉁한 원뿔. 아래는 숲, 위는 바위, 높은 산은 꼭대기에 눈
+  const hash = (a, b, c) => {
+    const t = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453;
+    return t - Math.floor(t);
+  };
+  const forest = PALETTE.trees.map((c) => new THREE.Color(c));
+  const rock = new THREE.Color(PALETTE.mountain);
+  const snow = new THREE.Color(PALETTE.snow);
+  const tmp = new THREE.Color();
+  function mountainGeo(rad, h, seed, snowLine) {
+    let g = new THREE.ConeGeometry(rad, h, 11, 5);
+    g.translate(0, h / 2, 0);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const z = pos.getZ(i);
+      const t = y / h;
+      if (t > 0.995 || t < 0.005) continue; // 꼭대기와 밑동은 그대로
+      // 같은 자리의 점은 같은 값을 받도록 좌표로 잡음을 만든다 (이음매가 벌어지지 않게)
+      const n1 = hash(Math.round(x * 4), Math.round(z * 4), seed) - 0.5;
+      const n2 = hash(Math.round(z * 4), Math.round(y * 4), seed + 7) - 0.5;
+      const k = 1 + n1 * 0.55 * (1 - t * 0.6);
+      pos.setX(i, x * k);
+      pos.setZ(i, z * k);
+      pos.setY(i, y + n2 * h * 0.12);
+    }
+    g = g.toNonIndexed();
+    g.computeVertexNormals();
+    const p = g.attributes.position;
+    const cols = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i += 3) {
+      const cy = (p.getY(i) + p.getY(i + 1) + p.getY(i + 2)) / 3 / h;
+      const v = hash(i, seed, 3);
+      if (cy > snowLine) tmp.copy(snow);
+      else if (cy > 0.58 + v * 0.12) tmp.copy(rock).offsetHSL(0, 0, (v - 0.5) * 0.06);
+      else tmp.copy(forest[Math.floor(v * forest.length)]).offsetHSL(0, 0, (cy - 0.3) * 0.06);
+      for (let j = 0; j < 3; j++) cols.set([tmp.r, tmp.g, tmp.b], (i + j) * 3);
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    return g;
   }
-  const rg = new THREE.BufferGeometry();
-  rg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  rg.setIndex(idx);
-  rg.computeVertexNormals();
-  land.add(new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ color: PALETTE.water, roughness: 0.35, metalness: 0.1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1 })));
-  // 강을 건너는 다리 (큰길과 순환도로가 강을 지나는 자리)
-  const bridgeMat = std(PALETTE.bridge);
-  for (const a of avenues) {
-    for (let s = S0; s < S1; s += 1) {
-      const x = a.ux * s;
-      const z = a.uz * s;
-      if (Math.abs(z - riverZ(x)) < 1) {
-        const deck = new THREE.Mesh(new THREE.BoxGeometry(34, 0.8, 7), bridgeMat);
-        deck.position.set(x, 0.25, z);
-        deck.rotation.y = a.rot;
-        land.add(deck);
-        break;
-      }
+  const mtMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, flatShading: true });
+
+  // 세 겹으로 둘러싼다: 가까운 숲 언덕 → 중간 산줄기 → 멀리 높은 눈 덮인 산
+  const rings = [
+    { n: 34, r0: 112, r1: 170, rad: [34, 62], h: [26, 58], snow: 2, valley: true },
+    { n: 30, r0: 185, r1: 320, rad: [70, 120], h: [60, 125], snow: 2, valley: true },
+    { n: 22, r0: 420, r1: 720, rad: [150, 260], h: [150, 280], snow: 0.8, valley: false },
+  ];
+  let seed = 1;
+  for (const ring of rings) {
+    for (let i = 0; i < ring.n; i++) {
+      const a = (i / ring.n) * Math.PI * 2 + (rand() - 0.5) * (Math.PI / ring.n);
+      const r = ring.r0 + rand() * (ring.r1 - ring.r0);
+      const x = Math.sin(a) * r;
+      const z = Math.cos(a) * r;
+      const rad = ring.rad[0] + rand() * (ring.rad[1] - ring.rad[0]);
+      const h = ring.h[0] + rand() * (ring.h[1] - ring.h[0]);
+      if (ring.valley && inValley(x, z, r)) continue; // 골짜기는 비운다
+      if (ring.valley && nearAvenue(x, z, rad * 0.55)) continue; // 다른 두 길이 닿는 산자락도 조금 비운다
+      const m = new THREE.Mesh(mountainGeo(rad, h, seed++, ring.snow), mtMat);
+      m.position.set(x, -1.5, z);
+      m.rotation.y = rand() * Math.PI * 2;
+      land.add(m);
     }
   }
 
-  // 들판: 도시에서 먼 곳의 밭
-  const fieldCols = [PALETTE.field1, PALETTE.field2, PALETTE.field3, PALETTE.grassDark];
-  const fieldMats = fieldCols.map((c) => std(c, { polygonOffset: true, polygonOffsetFactor: -1 }));
-  for (let i = 0, tries = 0; i < 90 && tries < 3000; tries++) {
-    const a = rand() * Math.PI * 2;
-    const r = 190 + rand() * 330;
-    const x = Math.cos(a) * r;
-    const z = Math.sin(a) * r;
-    const w = 30 + rand() * 50;
-    const d = 22 + rand() * 40;
-    if (!free(x, z, Math.max(w, d) * 0.6)) continue;
-    const m = new THREE.Mesh(flat(w, d), fieldMats[Math.floor(rand() * fieldMats.length)]);
-    m.position.set(x, -0.2, z);
-    m.rotation.y = rand() * Math.PI;
-    land.add(m);
-    i++;
-  }
-
-  // 교외 주택: 박공지붕이 있는 낮은 집들
-  const houses = [];
-  for (let tries = 0; tries < 9000 && houses.length < 560; tries++) {
-    const a = rand() * Math.PI * 2;
-    const r = R_PLATFORM + 7 + Math.pow(rand(), 1.4) * 130;
-    const x = Math.cos(a) * r;
-    const z = Math.sin(a) * r;
-    const w = 2 + rand() * 1.8;
-    const d = 1.8 + rand() * 1.4;
-    if (!free(x, z, 3)) continue;
-    if (houses.some((h) => Math.abs(h.x - x) < 4.2 && Math.abs(h.z - z) < 4.2)) continue;
-    // 길을 바라보도록 대체로 반지름 방향으로 놓는다
-    houses.push({ x, z, w, d, h: 1.4 + rand() * 1.6, rot: Math.atan2(x, z) + (rand() > 0.5 ? Math.PI / 2 : 0) + (rand() - 0.5) * 0.3, c: rand(), rc: rand() });
-  }
-  const bodyG = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-  const roofG = new THREE.CylinderGeometry(0.62, 0.62, 1, 3).rotateZ(Math.PI / 2).rotateY(Math.PI / 2);
-  roofG.scale(1, 0.62, 1.05);
-  roofG.translate(0, 0.19, 0);
-  const bodies = new THREE.InstancedMesh(bodyG, std(0xffffff), houses.length);
-  const roofs = new THREE.InstancedMesh(roofG, std(0xffffff), houses.length);
-  const m4 = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const e = new THREE.Euler();
-  const p = new THREE.Vector3();
-  const s = new THREE.Vector3();
-  const col = new THREE.Color();
-  const wallCols = [...PALETTE.facades.apt, ...PALETTE.facades.warm];
-  houses.forEach((h, i) => {
-    q.setFromEuler(e.set(0, h.rot, 0));
-    m4.compose(p.set(h.x, -0.05, h.z), q, s.set(h.w, h.h, h.d));
-    bodies.setMatrixAt(i, m4);
-    bodies.setColorAt(i, col.set(wallCols[Math.floor(h.c * wallCols.length)]));
-    m4.compose(p.set(h.x, h.h - 0.05, h.z), q, s.set(h.w * 1.08, h.w * 0.9, h.d * 1.1));
-    roofs.setMatrixAt(i, m4);
-    roofs.setColorAt(i, col.set(PALETTE.roof[Math.floor(h.rc * PALETTE.roof.length)]));
-  });
-  land.add(bodies, roofs);
-
-  // 숲: 무리 지어 선 나무들
+  // 골짜기 바닥과 산자락의 숲
   const trunk = new THREE.CylinderGeometry(0.06, 0.09, 0.7, 5).translate(0, 0.35, 0);
   const crownR = new THREE.IcosahedronGeometry(0.6, 0).translate(0, 1.1, 0);
   const crownC = new THREE.ConeGeometry(0.5, 1.5, 6).translate(0, 1.2, 0);
   const prep = (g) => (g.index ? g.toNonIndexed() : g);
-  const treeGeos = [mergeGeometries([prep(trunk.clone()), prep(crownR)]), mergeGeometries([prep(trunk.clone()), prep(crownC)])];
+  const crownGeos = [prep(crownR), prep(crownC)];
+  const trunkMat = std(PALETTE.trunk);
   const trees = [[], []];
-  for (let c = 0; c < 70; c++) {
+  for (let c = 0; c < 80; c++) {
     const a = rand() * Math.PI * 2;
-    const r = R_PLATFORM + 10 + rand() * 360;
-    const cx = Math.cos(a) * r;
-    const cz = Math.sin(a) * r;
-    const rad = 6 + rand() * 18;
-    const n = 15 + Math.floor(rand() * 45);
-    const conifer = rand() > 0.6;
+    const r = R_PLATFORM + 6 + rand() * 60;
+    const cx = Math.sin(a) * r;
+    const cz = Math.cos(a) * r;
+    const rad = 5 + rand() * 14;
+    const n = 15 + Math.floor(rand() * 40);
+    const conifer = rand() > 0.5;
     for (let k = 0; k < n; k++) {
       const t = rand() * Math.PI * 2;
       const rr = Math.sqrt(rand()) * rad;
       const x = cx + Math.cos(t) * rr;
       const z = cz + Math.sin(t) * rr;
-      if (Math.hypot(x, z) < R_PLATFORM + 3 || !free(x, z, 1.5)) continue;
-      if (houses.some((h) => Math.abs(h.x - x) < 2.4 && Math.abs(h.z - z) < 2.4)) continue;
-      trees[conifer && rand() > 0.2 ? 1 : 0].push({ x, z, s: (1.1 + rand() * 1.1) * (1 + Math.max(0, Math.hypot(x, z) - 150) / 220), g: rand() });
+      if (Math.hypot(x, z) < R_PLATFORM + 3 || nearAvenue(x, z, 4)) continue;
+      trees[conifer && rand() > 0.2 ? 1 : 0].push({ x, z, s: 1.1 + rand() * 1.2, g: rand() });
     }
   }
   // 도시 가장자리를 두른 가로수 띠
@@ -244,51 +220,27 @@ function createLandscape(scene) {
     const r = R_PLATFORM + 2.2 + (i % 2) * 1.6;
     const x = Math.cos(a) * r;
     const z = Math.sin(a) * r;
-    if (!free(x, z, 0.5)) continue;
+    if (nearAvenue(x, z, 3.5)) continue;
     trees[0].push({ x, z, s: 1 + rand() * 0.3, g: rand() });
   }
+  const m4 = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const e = new THREE.Euler();
+  const p = new THREE.Vector3();
+  const s = new THREE.Vector3();
+  const col = new THREE.Color();
   trees.forEach((list, kind) => {
     if (!list.length) return;
-    const mesh = new THREE.InstancedMesh(treeGeos[kind], std(0xffffff), list.length);
+    const mesh = new THREE.InstancedMesh(crownGeos[kind], std(0xffffff), list.length);
+    const trunks = new THREE.InstancedMesh(trunk, trunkMat, list.length);
+    land.add(trunks);
     list.forEach((t, i) => {
       m4.compose(p.set(t.x, -0.2, t.z), q.setFromEuler(e.set(0, t.g * 6, 0)), s.set(t.s, t.s, t.s));
       mesh.setMatrixAt(i, m4);
+      trunks.setMatrixAt(i, m4);
       mesh.setColorAt(i, col.set(PALETTE.trees[Math.floor(t.g * PALETTE.trees.length)]));
     });
     land.add(mesh);
   });
-
-  // 언덕과 산: 멀리서 도시를 둘러싼다
-  const hillMats = [std(PALETTE.hill), std(PALETTE.grassDark)];
-  for (let i = 0; i < 34; i++) {
-    const a = (i / 34) * Math.PI * 2 + rand() * 0.15;
-    const r = 360 + rand() * 220;
-    const x = Math.cos(a) * r;
-    const z = Math.sin(a) * r;
-    if (nearAvenue(x, z, 40) || nearRiver(x, z, 30)) continue;
-    const hill = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), hillMats[i % 2]);
-    hill.scale.set(60 + rand() * 70, 14 + rand() * 30, 60 + rand() * 70);
-    hill.position.set(x, -4, z);
-    hill.rotation.y = rand() * 3;
-    land.add(hill);
-  }
-  const mtMat = std(PALETTE.mountain);
-  const snowMat = std(PALETTE.snow);
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2 + rand() * 0.25;
-    const r = 700 + rand() * 300;
-    const x = Math.cos(a) * r;
-    const z = Math.sin(a) * r;
-    const h = 110 + rand() * 120;
-    const rad = 130 + rand() * 120;
-    const mt = new THREE.Mesh(new THREE.ConeGeometry(rad, h, 7, 1), mtMat);
-    mt.position.set(x, h / 2 - 2, z);
-    mt.rotation.y = rand() * 3;
-    land.add(mt);
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(rad * 0.24, h * 0.24, 7, 1), snowMat);
-    cap.position.set(x, h - (h * 0.24) / 2 - 2 + 0.5, z);
-    cap.rotation.y = mt.rotation.y;
-    land.add(cap);
-  }
   return land;
 }

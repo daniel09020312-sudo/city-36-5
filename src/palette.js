@@ -54,6 +54,9 @@ export const PALETTE = {
     apt: ['#E7E2D8', '#DDD6C9', '#EEEAE1', '#D5CEC1', '#E3DDD0'], // 아파트
   },
   roof: ['#8E5E4C', '#71605A', '#7E8790', '#A06B52', '#5F6A73'],
+  trunk: '#7A5A40', // 나무 몸통
+  window: '#33424F', // 창유리
+  windowSky: '#9DB3C6', // 하늘이 비친 창
   trees: ['#5E8246', '#6C9050', '#507339', '#7A9B58', '#5A7A44'],
   clothes: ['#5B6F8C', '#8C5D5D', '#5E7F64', '#B59B6C', '#6D6D78', '#8F7A9E', '#C9C4B8', '#3F4A5C', '#A7745A', '#4E6E7E'],
   cars: ['#E6E3DC', '#2F3238', '#8B9AA8', '#9A5552', '#3E5B7E', '#C9BAA1', '#55595F', '#DAD7CF'],
